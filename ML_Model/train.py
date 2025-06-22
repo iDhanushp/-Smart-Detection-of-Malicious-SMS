@@ -23,7 +23,50 @@ if 'label' not in df.columns or 'text' not in df.columns:
     # UCI format: v1,v2
     df.columns = ['label', 'text'] + list(df.columns[2:])
 df = df[['label', 'text']]
-df['label'] = df['label'].map({'ham': 0, 'spam': 1})
+
+# Enhanced three-class classification
+def classify_message(text):
+    """Enhanced classification logic for three classes"""
+    text_lower = text.lower()
+    
+    # Fraudulent indicators (high priority)
+    fraud_keywords = [
+        'urgent', 'account suspended', 'verify now', 'click here', 'bank security',
+        'password expired', 'unauthorized access', 'verify account', 'security alert',
+        'account locked', 'verify identity', 'suspicious activity', 'fraud alert',
+        'account compromised', 'verify details', 'security breach', 'account blocked'
+    ]
+    
+    # Spam indicators (promotional content)
+    spam_keywords = [
+        'limited time', 'offer', 'discount', 'sale', 'free', 'win', 'prize',
+        'congratulations', 'winner', 'claim', 'exclusive', 'special offer',
+        '50% off', 'buy now', 'limited offer', 'flash sale', 'clearance',
+        'promotion', 'deal', 'bargain', 'save money', 'best price'
+    ]
+    
+    # Check for fraudulent content
+    fraud_score = sum(1 for keyword in fraud_keywords if keyword in text_lower)
+    spam_score = sum(1 for keyword in spam_keywords if keyword in text_lower)
+    
+    # Enhanced classification logic
+    if fraud_score >= 2 or ('verify' in text_lower and 'account' in text_lower):
+        return 2  # Fraudulent
+    elif spam_score >= 2 or any(word in text_lower for word in ['offer', 'discount', 'sale', 'free']):
+        return 1  # Spam
+    else:
+        return 0  # Legitimate
+
+# Apply enhanced classification
+df['enhanced_label'] = df['text'].apply(classify_message)
+
+# Map original labels to new system (0=legitimate, 1=spam, 2=fraudulent)
+df['label'] = df['enhanced_label']
+
+print(f"Class distribution:")
+print(f"Legitimate (0): {(df['label'] == 0).sum()}")
+print(f"Spam (1): {(df['label'] == 1).sum()}")
+print(f"Fraudulent (2): {(df['label'] == 2).sum()}")
 
 # 2. Preprocess
 def clean_text(text):

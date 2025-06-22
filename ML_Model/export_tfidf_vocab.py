@@ -1,23 +1,32 @@
 import joblib
 import json
+import nltk
+from nltk.corpus import stopwords
 
-VECTORIZER_PATH = 'vectorizer.pkl'
-OUTPUT_JSON = 'tfidf_vocab.json'
+# Load the trained vectorizer
+vectorizer = joblib.load('vectorizer.pkl')
 
-vectorizer = joblib.load(VECTORIZER_PATH)
+# Get vocabulary and IDF values
+vocabulary = vectorizer.vocabulary_
+idf_values = vectorizer.idf_.tolist()
 
-# Export vocabulary and idf values
-vocab = vectorizer.vocabulary_
-idf = vectorizer.idf_.tolist()
+# Get stop words
+nltk.download('stopwords')
+stop_words = list(stopwords.words('english'))
 
-# Map word to index and idf
-export = {
-    'vocabulary': vocab,
-    'idf': idf,
-    'stop_words': list(vectorizer.stop_words_) if hasattr(vectorizer, 'stop_words_') else []
+# Create export data with proper type conversion
+export_data = {
+    'vocabulary': {str(k): int(v) for k, v in vocabulary.items()},
+    'idf': [float(x) for x in idf_values],
+    'stop_words': stop_words,
+    'max_features': int(vectorizer.max_features)
 }
 
-with open(OUTPUT_JSON, 'w', encoding='utf-8') as f:
-    json.dump(export, f, ensure_ascii=False, indent=2)
+# Save as JSON
+with open('tfidf_vocab.json', 'w') as f:
+    json.dump(export_data, f, indent=2)
 
-print(f'TF-IDF vocabulary exported to {OUTPUT_JSON}') 
+print(f"Vocabulary exported to tfidf_vocab.json")
+print(f"Vocabulary size: {len(vocabulary)}")
+print(f"IDF values: {len(idf_values)}")
+print(f"Stop words: {len(stop_words)}") 
