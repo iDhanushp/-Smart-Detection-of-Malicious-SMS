@@ -1,0 +1,126 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv39/
+.venv310/
+.venv311/
+.venv312/
+
+# PyTorch
+*.pth
+*.pt
+
+# TensorFlow
+*.pb
+*.pbtxt
+*.ckpt
+*.meta
+
+# Model files (keep only the final exported models)
+*.pkl
+*.h5
+*.joblib
+*.pickle
+
+# Data files
+*.csv
+*.json
+*.xml
+*.txt
+data/
+data_set/
+datasets/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.lock
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# iOS
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Coverage
+coverage/
+*.lcov
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Keep only essential model files
+!ML_Model/fraud_detector.tflite
+!ML_Model/tfidf_vocab.json
+!sms_fraud_detectore_app/assets/fraud_detector.tflite
+!sms_fraud_detectore_app/assets/tfidf_vocab.json 
