@@ -307,3 +307,42 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 **Built with ❤️ using Python, TensorFlow, and scikit-learn** 
+
+# [UPDATE] July 2025: Indian Sender Logic, Data Pipeline, and App Integration
+
+## 🇮🇳 Indian Sender Logic (Legitimate vs Promotional)
+- **Legitimate Codes:**
+  - 'AX-', 'AD-', 'JM-', 'CP-', 'VM-', 'VK-', 'BZ-', 'TX-', 'JD-', 'BK-', 'BP-', 'JX-', 'TM-', 'QP-', 'BV-', 'JK-', 'BH-', 'TG-', 'JG-', 'VD-',
+  - 'AIRTEL', 'SBIINB', 'SBIUPI', 'AXISBK', 'IOBCHN', 'IOBBNK', 'KOTAKB', 'PHONPE', 'PAYTM', 'ADHAAR', 'VAAHAN', 'ESICIP', 'EPFOHO', 'BESCOM', 'CBSSBI', 'NBHOME', 'NBCLUB', 'GOKSSO', 'TRAIND', 'AIRXTM', 'AIRMCA', 'NSESMS', 'CDSLEV', 'CDSLTX', 'SMYTTN', 'BFDLTS', 'BFDLPS', 'BSELTD'
+- **Promotional Codes (Always Spam):**
+  - 'MGLAMM', 'APLOTF', 'EVOKHN', 'MYNTRA', 'FLPKRT', 'ZEPTON', 'DOMINO', 'ZOMATO', 'SWIGGY', 'MEESHO', 'BLUDRT', 'NOBRKR', 'GROWWZ', 'PAISAD', 'PRUCSH', 'HEDKAR', 'BOTNIC', 'EKARTL', 'RECHRG'
+- **Logic:**
+  - Promotional codes are always classified as spam, regardless of ML output.
+  - Legitimate codes are classified as legitimate unless spam probability is very high.
+  - If the feature vector is weak (few/no recognized words), the app uses sender code and keywords to decide.
+
+## 🏭 Data Pipeline: datasetgenerateor & sms_extractor
+- **sms_extractor:**
+  - Exports all SMS from a device inbox to CSV (`phone_sms_export_*.csv`)
+  - All processing is local; no data leaves the device unless user shares the file
+- **datasetgenerateor:**
+  - Cleans, labels, and filters the exported SMS data
+  - Uses AI labeling, confidence filtering, and maps 'fraud' to 'spam' for binary classification
+  - Produces `final_labeled_sms.csv` for ML training
+
+## 🤖 Model Training & Export
+- Model is trained on high-confidence, labeled data from `datasetgenerateor`
+- Exported as TensorFlow Lite for mobile
+
+## 📱 Integration with Flutter App (Updated)
+- The app now uses pattern-based logic for Indian senders:
+  - Promotional codes are always spam
+  - Legitimate codes get benefit of doubt
+  - Weak feature vectors trigger pattern/keyword fallback
+- See `FraudDetector` in the Flutter app for the latest logic
+
+## 🗒️ Changelog (July 2025)
+- Indian sender logic (legitimate vs promotional) added
+- Pattern-based fallback for weak feature vectors
+- Data pipeline and extractor documentation clarified
+- Model bias due to vocabulary mismatch fixed 
