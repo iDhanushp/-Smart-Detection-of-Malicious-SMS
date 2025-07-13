@@ -17,32 +17,65 @@ class SmsLogItem extends StatelessWidget {
           entry.displayIcon,
           color: entry.displayColor,
         ),
-        title:
-            Text(entry.sender, style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Icon(entry.displayIcon, color: entry.displayColor),
+            const SizedBox(width: 8),
+            Text(entry.resultText),
+          ],
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(entry.body),
             SizedBox(height: 4),
-            if (entry.reason != null)
-              Container(
-                padding: EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  entry.reason!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[700],
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            SizedBox(height: 4),
             Row(
               children: [
+                // Treat both spam (1) and fraudulent (2) as spam for badge purposes.
+                if (entry.result == DetectionResult.spam ||
+                    entry.result == DetectionResult.fraudulent)
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.report, color: Colors.orange, size: 14),
+                        const SizedBox(width: 4),
+                        Text('Spam',
+                            style: TextStyle(
+                                color: Colors.orange,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                // Fraud badge when classified as fraudulent OR spam from phone number.
+                if ((entry.result == DetectionResult.fraudulent) ||
+                    (entry.result == DetectionResult.spam &&
+                        entry.sender.startsWith('+')))
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning, color: Colors.red, size: 14),
+                        const SizedBox(width: 4),
+                        Text('Fraud',
+                            style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
                 Text(
                   entry.resultText,
                   style: TextStyle(
@@ -71,7 +104,17 @@ class SmsLogItem extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime dt) {
-    return "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+  String _formatTime(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
   }
 }

@@ -15,6 +15,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   telephony: ^0.2.0
   permission_handler: ^11.0.1
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:
@@ -27,6 +28,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fraud_detector.tflite
+    # optional heavier model (DistilBERT – add the file before re-enabling)
+    # - assets/fraud_bert.tflite
     - assets/tfidf_vocab.json
 
 # The following defines the version and build number for your application.

@@ -1,166 +1,109 @@
+import 'dart:typed_data';
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:math' as math;
 
+/// Minimal, single-purpose detector: returns 0 (Legit), 1 (Spam), 2 (Fraud).
+/// Rules:
+///   • Spam  = spamProb > legitProb.
+///   • Fraud = Spam + sender starts with +countryCode AND spamProb ≥ _fraudThreshold.
 class FraudDetector {
-  late Interpreter _interpreter;
+  late Interpreter _intrp;
+
+  static const double _spamCutoffTrusted = 0.33; // alphanumeric senders
+  static const double _spamCutoffUnverified = 0.28; // phone numbers
+  static const double _fraudThreshold = 0.65;
+
+  static const List<String> _spamKeywords = [
+    'win',
+    'prize',
+    'offer',
+    'discount',
+    'free',
+    'claim',
+    'cashback',
+    'loan',
+    'lakh',
+    '₹',
+    'congratulations',
+    'lottery',
+    'deal'
+  ];
 
   Future<void> loadModel(String assetPath) async {
-    // Use more compatible interpreter options
-    final options = InterpreterOptions();
-
-    // Try to load with basic options first
-    try {
-      _interpreter = await Interpreter.fromAsset(assetPath, options: options);
-    } catch (e) {
-      print('Failed to load model with options: $e');
-      // Fallback to default loading
-      _interpreter = await Interpreter.fromAsset(assetPath);
-    }
+    _intrp = await Interpreter.fromAsset(assetPath);
   }
 
-  /// Enhanced prediction with sender validation and reasoning for three classes
-  /// Returns a map with 'prediction' (0, 1, or 2) and 'reason' (String)
-  Map<String, dynamic> predictWithReasoning(String sender, List<double> input) {
-    // First, check sender validation
-    final senderValidation = _analyzeSender(sender);
+  /// Returns a map with keys: prediction (0/1/2) and reason (String).
+  Map<String, dynamic> predictWithReasoning(
+      String sender, String body, List<double> input) {
+    final probs = _infer(input);
+    final spamProb = probs[1];
+    final legitProb = probs[0];
 
-    if (senderValidation['isTrusted']) {
-      // Trusted sender (bank/app) - likely legitimate
-      return {
-        'prediction': 0,
-        'reason': 'Trusted sender: ${senderValidation['reason']}'
-      };
+    final bool phoneSender = RegExp(r'^\+[0-9]{6,}').hasMatch(sender);
+    final double cutoff =
+        phoneSender ? _spamCutoffUnverified : _spamCutoffTrusted;
+
+    // Spam only when the model is actually more confident in Spam than Legit.
+    bool isSpam = (spamProb >= cutoff) && (spamProb > legitProb);
+
+    // Fallback keyword heuristic when the model is unsure (probabilities very
+    // close: difference < 1e-6).
+    if (!isSpam && (spamProb - legitProb).abs() < 1e-6) {
+      final lower = body.toLowerCase();
+      isSpam = _spamKeywords.any((kw) => lower.contains(kw));
     }
+    final bool isFraud = isSpam && phoneSender && spamProb >= _fraudThreshold;
 
-    // If sender is suspicious, apply ML detection
-    final mlPrediction = predict(input);
-    final mlReason = _getPredictionReason(mlPrediction);
+    final prediction = isFraud ? 2 : (isSpam ? 1 : 0);
+
+    // Console log for every detection (sender, probs, final prediction)
+    // Additional diagnostics: vector magnitude & non-zero feature count.
+    double magnitude = 0;
+    int nonZero = 0;
+    for (var v in input) {
+      if (v != 0) {
+        nonZero++;
+        magnitude += v * v;
+      }
+    }
+    magnitude = magnitude > 0 ? math.sqrt(magnitude) : 0;
+
+    print('DETECT sender="$sender" '
+        'legit=${legitProb.toStringAsFixed(3)} '
+        'spam=${spamProb.toStringAsFixed(3)} '
+        'cutoff=${phoneSender ? _spamCutoffUnverified : _spamCutoffTrusted} '
+        'vecNZ=$nonZero vecNorm=${magnitude.toStringAsFixed(4)} '
+        '-> pred=$prediction');
 
     return {
-      'prediction': mlPrediction,
-      'reason': 'Suspicious sender + $mlReason'
+      'prediction': prediction,
+      'reason': 'spamProb ${(spamProb * 100).toStringAsFixed(2)}%',
     };
   }
 
-  /// Get human-readable reason for ML prediction
-  String _getPredictionReason(int prediction) {
-    switch (prediction) {
-      case 0:
-        return 'ML model classified as legitimate';
-      case 1:
-        return 'ML model flagged as spam (promotional content)';
-      case 2:
-        return 'ML model flagged as fraudulent (security threat)';
-      default:
-        return 'ML model classification unclear';
-    }
-  }
+  // Lightweight helpers --------------------------------------------------
 
-  /// Enhanced prediction with sender validation for three classes
-  /// Returns 0 (legitimate), 1 (spam), or 2 (fraudulent)
-  int predictWithSenderValidation(String sender, List<double> input) {
-    // First, check sender validation
-    if (_isTrustedSender(sender)) {
-      // Trusted sender (bank/app) - likely legitimate
-      return 0;
-    }
-
-    // If sender is suspicious (phone number), apply ML detection
-    return predict(input);
-  }
-
-  /// Expects input as a List<double> (TF-IDF vector)
-  /// Returns 0 (legitimate), 1 (spam), or 2 (fraudulent)
   int predict(List<double> input) {
+    final probs = _infer(input);
+    return probs[1] > probs[0] ? 1 : 0;
+  }
+
+  List<double> _infer(List<double> input) {
     try {
-      // Model expects shape [1, 3000] - add batch dimension
-      final inputTensor = [input];
+      // Wrap feature vector in batch dimension
+      final inputTensor = [Float32List.fromList(input)]; // shape [1, N]
 
-      // Create output tensor with proper shape [1, 3] for three classes
-      var output = List.filled(1, List.filled(3, 0.0));
+      // Output tensor as List<double> inside batch list (shape [1,3])
+      final outputTensor = [List<double>.filled(3, 0.0)];
 
-      // Run inference
-      _interpreter.run(inputTensor, output);
+      _intrp.run(inputTensor, outputTensor);
 
-      // Get probabilities from softmax output
-      final probabilities = output[0] as List<double>;
-
-      // Find the class with highest probability
-      int maxIndex = 0;
-      double maxProb = probabilities[0];
-      for (int i = 1; i < probabilities.length; i++) {
-        if (probabilities[i] > maxProb) {
-          maxProb = probabilities[i];
-          maxIndex = i;
-        }
-      }
-
-      // Return the predicted class (0=legitimate, 1=spam, 2=fraudulent)
-      return maxIndex;
+      return List<double>.from(outputTensor[0]);
     } catch (e) {
-      print('Prediction error: $e');
-      // Return safe default (legitimate)
-      return 0;
+      print('TFLite inference error: $e');
+      return [0.5, 0.5, 0.0];
     }
-  }
-
-  /// Analyze sender and return detailed information
-  Map<String, dynamic> _analyzeSender(String sender) {
-    if (sender.isEmpty) {
-      return {'isTrusted': false, 'reason': 'Empty sender'};
-    }
-
-    // Remove any whitespace
-    sender = sender.trim();
-
-    // Check if sender starts with country code (suspicious)
-    // Pattern: +91, +1, +44, etc.
-    if (RegExp(r'^\+[0-9]{1,4}').hasMatch(sender)) {
-      return {'isTrusted': false, 'reason': 'Phone number with country code'};
-    }
-
-    // Check if sender is alphanumeric (trusted)
-    // Pattern: HDFCBK, VM-AIRTEL, BX-ICICIB, etc.
-    if (RegExp(r'^[A-Z0-9\-]{3,15}$').hasMatch(sender.toUpperCase())) {
-      return {'isTrusted': true, 'reason': 'Bank/App sender ID (alphanumeric)'};
-    }
-
-    // Check if it's a short numeric code (like 5-digit codes)
-    if (RegExp(r'^[0-9]{4,6}$').hasMatch(sender)) {
-      return {
-        'isTrusted': true,
-        'reason': 'Short numeric code (likely trusted service)'
-      };
-    }
-
-    // Default to suspicious for unknown patterns
-    return {'isTrusted': false, 'reason': 'Unknown sender pattern'};
-  }
-
-  /// Check if sender is trusted (alphanumeric) vs suspicious (phone number)
-  bool _isTrustedSender(String sender) {
-    if (sender.isEmpty) return false;
-
-    // Remove any whitespace
-    sender = sender.trim();
-
-    // Check if sender starts with country code (suspicious)
-    // Pattern: +91, +1, +44, etc.
-    if (RegExp(r'^\+[0-9]{1,4}').hasMatch(sender)) {
-      return false; // Suspicious - phone number
-    }
-
-    // Check if sender is alphanumeric (trusted)
-    // Pattern: HDFCBK, VM-AIRTEL, BX-ICICIB, etc.
-    if (RegExp(r'^[A-Z0-9\-]{3,15}$').hasMatch(sender.toUpperCase())) {
-      return true; // Trusted - bank/app sender ID
-    }
-
-    // Check if it's a short numeric code (like 5-digit codes)
-    if (RegExp(r'^[0-9]{4,6}$').hasMatch(sender)) {
-      return true; // Trusted - short numeric codes
-    }
-
-    // Default to suspicious for unknown patterns
-    return false;
   }
 }

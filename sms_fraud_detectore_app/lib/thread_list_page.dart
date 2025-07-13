@@ -128,16 +128,28 @@ class ThreadListPage extends StatelessWidget {
   Widget _buildThreadTile(
       BuildContext context, ThreadEntry thread, SmsLogEntry last) {
     final isFraudulent = last.result == DetectionResult.fraudulent;
+    final isSpam = last.result == DetectionResult.spam;
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: CircleAvatar(
         radius: 24,
-        backgroundColor:
-            isFraudulent ? Colors.red.shade100 : Colors.blue.shade100,
+        backgroundColor: isFraudulent
+            ? Colors.red.shade100
+            : isSpam
+                ? Colors.orange.shade100
+                : Colors.blue.shade100,
         child: Icon(
-          isFraudulent ? Icons.warning : Icons.person,
-          color: isFraudulent ? Colors.red : Colors.blue,
+          isFraudulent
+              ? Icons.warning
+              : isSpam
+                  ? Icons.report
+                  : Icons.person,
+          color: isFraudulent
+              ? Colors.red
+              : isSpam
+                  ? Colors.orange
+                  : Colors.blue,
           size: 24,
         ),
       ),
@@ -152,17 +164,20 @@ class ThreadListPage extends StatelessWidget {
               ),
             ),
           ),
-          if (isFraudulent)
+          if (isFraudulent || isSpam)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.red.shade100,
+                color:
+                    isFraudulent ? Colors.red.shade100 : Colors.orange.shade100,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                'FRAUD',
+                isFraudulent ? 'FRAUD' : 'SPAM',
                 style: TextStyle(
-                  color: Colors.red.shade700,
+                  color: isFraudulent
+                      ? Colors.red.shade700
+                      : Colors.orange.shade700,
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                 ),
@@ -187,16 +202,32 @@ class ThreadListPage extends StatelessWidget {
           Row(
             children: [
               Icon(
-                isFraudulent ? Icons.warning : Icons.check_circle,
+                isFraudulent
+                    ? Icons.warning
+                    : isSpam
+                        ? Icons.report
+                        : Icons.check_circle,
                 size: 14,
-                color: isFraudulent ? Colors.red : Colors.green,
+                color: isFraudulent
+                    ? Colors.red
+                    : isSpam
+                        ? Colors.orange
+                        : Colors.green,
               ),
               const SizedBox(width: 4),
               Text(
-                isFraudulent ? 'Fraudulent' : 'Legitimate',
+                isFraudulent
+                    ? 'Fraudulent'
+                    : isSpam
+                        ? 'Spam'
+                        : 'Legitimate',
                 style: TextStyle(
                   fontSize: 12,
-                  color: isFraudulent ? Colors.red : Colors.green,
+                  color: isFraudulent
+                      ? Colors.red
+                      : isSpam
+                          ? Colors.orange
+                          : Colors.green,
                   fontWeight: FontWeight.w500,
                 ),
               ),

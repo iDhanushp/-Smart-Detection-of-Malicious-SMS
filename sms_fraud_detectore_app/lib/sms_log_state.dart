@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:telephony/telephony.dart';
 import 'sms_log_model.dart';
+import 'package:flutter/foundation.dart';
 import 'tfidf_preprocessor.dart';
 import 'fraud_detector.dart';
 import 'thread_models.dart';
@@ -43,7 +44,7 @@ class SmsLogState extends ChangeNotifier {
   void _onSmsReceived(String sender, String body) {
     if (!detectionEnabled) return;
     final vector = preprocessor.transform(body);
-    final result = detector.predictWithReasoning(sender, vector);
+    final result = detector.predictWithReasoning(sender, body, vector);
     final pred = result['prediction'] as int;
     final reason = result['reason'] as String;
     final detectionResult = SmsLogEntry.fromPrediction(pred);
@@ -61,7 +62,7 @@ class SmsLogState extends ChangeNotifier {
   void _onSmsReceivedWithTs(String sender, String body, DateTime ts) {
     if (!detectionEnabled) return;
     final vector = preprocessor.transform(body);
-    final result = detector.predictWithReasoning(sender, vector);
+    final result = detector.predictWithReasoning(sender, body, vector);
     final pred = result['prediction'] as int;
     final reason = result['reason'] as String;
     final detectionResult = SmsLogEntry.fromPrediction(pred);
@@ -89,6 +90,8 @@ class SmsLogState extends ChangeNotifier {
   }
 
   void addLogEntry(SmsLogEntry entry) {
+    print(
+        '[addLogEntry] sender: ${entry.sender}, result: ${entry.result}, reason: ${entry.reason}');
     _log.insert(0, entry);
     notifyListeners();
   }
@@ -100,11 +103,23 @@ class SmsLogState extends ChangeNotifier {
       await initialize();
     }
 
+    // Temporarily silence the Telephony plugin's noisy "Column is ..." prints
+    final DebugPrintCallback originalDebugPrint = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {};
+
     _isSyncing = true;
     notifyListeners();
 
     Telephony telephony = Telephony.instance;
-    List<SmsMessage> messages = await telephony.getInboxSms();
+    // Fetch only the columns we actually need; reduces internal logging too
+    List<SmsMessage> messages = await telephony.getInboxSms(
+      columns: [
+        SmsColumn.ADDRESS,
+        SmsColumn.BODY,
+        SmsColumn.DATE,
+        SmsColumn.ID,
+      ],
+    );
 
     // Convert Object dates to DateTime and sort
     messages.sort((a, b) {
@@ -116,8 +131,8 @@ class SmsLogState extends ChangeNotifier {
     final List<SmsLogEntry> newLog = [];
     for (final sms in messages) {
       final features = preprocessor.transform(sms.body ?? '');
-      final result =
-          detector.predictWithReasoning(sms.address ?? 'Unknown', features);
+      final result = detector.predictWithReasoning(
+          sms.address ?? 'Unknown', sms.body ?? '', features);
       final prediction = result['prediction'] as int;
       final reason = result['reason'] as String;
       final detectionResult = SmsLogEntry.fromPrediction(prediction);
@@ -132,5 +147,8 @@ class SmsLogState extends ChangeNotifier {
     _log = newLog;
     notifyListeners();
     _isSyncing = false;
+
+    // Restore normal debugPrint behaviour
+    debugPrint = originalDebugPrint;
   }
 }

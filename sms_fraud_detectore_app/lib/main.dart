@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'sms_log_state.dart';
 import 'sms_log_model.dart';
@@ -8,9 +9,24 @@ import 'sms_log_page.dart';
 import 'theme_controller.dart';
 import 'thread_list_page.dart';
 import 'sms_permission_helper.dart';
+// Advanced features imports
+import 'theme/app_theme.dart';
+import 'providers/theme_provider.dart';
+import 'services/realtime_detection_service.dart';
+import 'widgets/realtime_detection_dashboard.dart';
+import 'dart:async';
 
 void main() {
-  runApp(const MyApp());
+  // Run the whole app in a custom Zone so we can filter *print* statements
+  // from noisy plugins (e.g. Telephony).
+  runZonedGuarded(() {
+    runApp(const MyApp());
+  }, (error, stack) {
+    debugPrint('Unhandled error: $error');
+  }, zoneSpecification: ZoneSpecification(print: (self, parent, zone, line) {
+    if (line.startsWith('Column is')) return; // suppress noisy cursor logs
+    parent.print(zone, line);
+  }));
 }
 
 class MyApp extends StatelessWidget {
@@ -22,35 +38,17 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => SmsLogState()),
         ChangeNotifierProvider(create: (_) => ThemeController()),
+        // Advanced providers
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => RealtimeDetectionService()),
       ],
-      child: Consumer<ThemeController>(
-        builder: (_, themeCtrl, __) => MaterialApp(
-          title: 'SMS Fraud Detector',
-          themeMode: themeCtrl.mode,
-          theme: ThemeData.light(useMaterial3: true).copyWith(
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
-            floatingActionButtonTheme: const FloatingActionButtonThemeData(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-            ),
-          ),
-          darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
-            floatingActionButtonTheme: const FloatingActionButtonThemeData(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-            ),
-            snackBarTheme:
-                const SnackBarThemeData(backgroundColor: Colors.black87),
-          ),
+      child: Consumer2<ThemeController, ThemeProvider>(
+        builder: (_, themeCtrl, themeProvider, __) => MaterialApp(
+          title: 'Advanced SMS Fraud Detector',
+          themeMode:
+              themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
           home: const HomePage(),
         ),
       ),
@@ -67,7 +65,6 @@ class HomePage extends StatefulWidget {
 class HomePageState extends State<HomePage> {
   late FraudDetector _fraudDetector;
   late TfidfPreprocessor _preprocessor;
-  bool _isDetectionEnabled = true;
   bool _isModelLoaded = false;
   int _currentIndex = 0;
 
@@ -81,10 +78,27 @@ class HomePageState extends State<HomePage> {
 
   Future<void> _initializeApp() async {
     await SmsPermissionHelper.requestAll();
+
+    // Initialize basic services
     _fraudDetector = FraudDetector();
     await _fraudDetector.loadModel('assets/fraud_detector.tflite');
     _preprocessor = TfidfPreprocessor();
     await _preprocessor.loadVocab('assets/tfidf_vocab.json');
+
+    // Initialize real-time detection service
+    final detectionService =
+        Provider.of<RealtimeDetectionService>(context, listen: false);
+    await detectionService.initialize();
+
+    // Set up detection callbacks
+    detectionService.onDetectionResult = (entry) => _onDetectionResult(entry);
+    detectionService.onError = (error) => _onDetectionError(error);
+    detectionService.onMonitoringStarted = () => _onMonitoringStarted();
+    detectionService.onMonitoringStopped = () => _onMonitoringStopped();
+
+    // Start real-time monitoring
+    await detectionService.startMonitoring();
+
     // Sync device SMS
     await Provider.of<SmsLogState>(context, listen: false).syncDeviceSms();
 
@@ -93,7 +107,7 @@ class HomePageState extends State<HomePage> {
       _isModelLoaded = true;
       _pages.addAll([
         ThreadListPage(),
-        const DetectionDashboardPage(),
+        const RealtimeDetectionDashboard(),
         SmsLogPage(),
       ]);
     });
@@ -102,45 +116,79 @@ class HomePageState extends State<HomePage> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
-      const SnackBar(
-        content: Text('SMS Fraud Detection is now active!'),
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.security, color: Colors.white),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Real-time SMS Fraud Detection is now active!',
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
+        duration: Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 
-  void _onSmsReceived(String sender, String body) {
-    if (!_isDetectionEnabled || !_isModelLoaded) return;
-    try {
-      final features = _preprocessor.transform(body);
-      final result = _fraudDetector.predictWithReasoning(sender, features);
-      final prediction = result['prediction'] as int;
-      final reason = result['reason'] as String;
-      final detectionResult = SmsLogEntry.fromPrediction(prediction);
-      final smsLog = SmsLogEntry(
-        sender: sender,
-        body: body,
-        result: detectionResult,
-        timestamp: DateTime.now(),
-        reason: reason,
-      );
-      Provider.of<SmsLogState>(context, listen: false).addLogEntry(smsLog);
-      _showDetectionResult(smsLog);
-    } catch (e) {
-      // ignore: avoid_print
-      print('Error processing SMS: $e');
-    }
+  void _onDetectionResult(SmsLogEntry entry) {
+    if (!mounted) return;
+
+    // Add to log state
+    Provider.of<SmsLogState>(context, listen: false).addLogEntry(entry);
+
+    // Show notification
+    _showDetectionNotification(entry);
   }
 
-  void _showDetectionResult(SmsLogEntry smsLog) {
-    final color = smsLog.displayColor;
-    final icon = smsLog.displayIcon;
-    final message = smsLog.result == DetectionResult.fraudulent
-        ? 'Fraudulent SMS detected!'
-        : smsLog.result == DetectionResult.spam
-            ? 'Spam SMS detected!'
-            : 'Legitimate SMS';
+  void _onDetectionError(String error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Detection Error: $error'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _onMonitoringStarted() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Real-time monitoring started'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _onMonitoringStopped() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Real-time monitoring stopped'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showDetectionNotification(SmsLogEntry entry) {
+    final color = entry.displayColor;
+    final icon = entry.displayIcon;
+    final message = _getDetectionMessage(entry);
+
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
@@ -148,20 +196,33 @@ class HomePageState extends State<HomePage> {
         content: Row(
           children: [
             Icon(icon, color: Colors.white),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    message,
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  if (entry.trustScore != null)
+                    Text(
+                      'Trust: ${(entry.trustScore! * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                ],
               ),
             ),
           ],
         ),
         backgroundColor: color,
-        duration: const Duration(seconds: 3),
+        duration: Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         action: SnackBarAction(
-          label: 'View',
+          label: 'Details',
           textColor: Colors.white,
           onPressed: () {
             setState(() {
@@ -173,22 +234,39 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+  String _getDetectionMessage(SmsLogEntry entry) {
+    if (entry.result == DetectionResult.fraudulent) {
+      return '🚨 Fraudulent SMS detected!';
+    } else if (entry.result == DetectionResult.spam) {
+      return '⚠️ Spam SMS detected!';
+    } else if (entry.isOTP == true) {
+      return '🔐 OTP detected - Stay alert!';
+    } else {
+      return '✅ Legitimate SMS';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_isModelLoaded || _pages.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('SMS Fraud Detector'),
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
+          title: Text('Advanced SMS Fraud Detector'),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          foregroundColor: Theme.of(context).colorScheme.onPrimary,
         ),
-        body: const Center(
+        body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text('Loading AI model...'),
+              Text('Loading advanced AI model...'),
+              SizedBox(height: 8),
+              Text(
+                'Initializing real-time protection...',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
             ],
           ),
         ),
@@ -200,89 +278,81 @@ class HomePageState extends State<HomePage> {
         index: _currentIndex,
         children: _pages,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
+        destinations: [
+          NavigationDestination(
+            icon: Icon(Icons.chat_outlined),
+            selectedIcon: Icon(Icons.chat),
             label: 'Messages',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.security),
-            label: 'Detection',
+          NavigationDestination(
+            icon: Icon(Icons.security_outlined),
+            selectedIcon: Icon(Icons.security),
+            label: 'Protection',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
             label: 'Logs',
           ),
         ],
       ),
       floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton(
+          ? FloatingActionButton.extended(
               onPressed: () {
                 // TODO: Implement new message composition
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text('New message feature coming soon!'),
+                    behavior: SnackBarBehavior.floating,
                   ),
                 );
               },
-              child: const Icon(Icons.edit),
+              icon: Icon(Icons.edit),
+              label: Text('New Message'),
             )
           : null,
       appBar: AppBar(
-        title: const Text('SMS Fraud Detector'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+        title: Text('Advanced SMS Fraud Detector'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         actions: [
+          // Theme toggle
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, child) {
+              return IconButton(
+                icon: Icon(
+                  themeProvider.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                ),
+                onPressed: () => themeProvider.toggleTheme(),
+                tooltip: 'Toggle theme',
+              );
+            },
+          ),
+          // Sync button
           Consumer<SmsLogState>(
             builder: (context, state, child) {
               return IconButton(
                 icon: state.isSyncing
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Theme.of(context).colorScheme.onPrimary,
+                          ),
                         ),
                       )
-                    : const Icon(Icons.sync),
+                    : Icon(Icons.sync),
+                onPressed: state.isSyncing ? null : () => state.syncDeviceSms(),
                 tooltip: 'Sync SMS',
-                onPressed: state.isSyncing
-                    ? null
-                    : () async {
-                        try {
-                          await state.syncDeviceSms();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('Device SMS synced successfully!'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Sync failed: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
               );
             },
           ),
