@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../sms_log_model.dart';
+import 'feedback_dialog.dart';
 
 class SmsLogItem extends StatelessWidget {
   final SmsLogEntry entry;
@@ -96,9 +97,30 @@ class SmsLogItem extends StatelessWidget {
             ),
           ],
         ),
-        trailing: Text(
-          _formatTime(entry.timestamp),
-          style: TextStyle(fontSize: 12, color: Colors.grey),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                _formatTime(entry.timestamp),
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.feedback_outlined, color: Colors.blue),
+              tooltip: 'Report classification error',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => FeedbackDialog(
+                    message: entry,
+                    currentClassification: entry.resultText,
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );

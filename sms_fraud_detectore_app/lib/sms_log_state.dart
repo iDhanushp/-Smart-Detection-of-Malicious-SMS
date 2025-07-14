@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'tfidf_preprocessor.dart';
 import 'fraud_detector.dart';
 import 'thread_models.dart';
+import 'package:provider/provider.dart';
+import 'services/realtime_detection_service.dart';
 
 class SmsLogState extends ChangeNotifier {
   List<SmsLogEntry> _log = [];
@@ -97,7 +99,7 @@ class SmsLogState extends ChangeNotifier {
   }
 
   // Call this on app startup or manual sync
-  Future<void> syncDeviceSms() async {
+  Future<void> syncDeviceSms(BuildContext context) async {
     // Ensure detector and preprocessor are initialized
     if (!_initialized) {
       await initialize();
@@ -147,6 +149,15 @@ class SmsLogState extends ChangeNotifier {
     _log = newLog;
     notifyListeners();
     _isSyncing = false;
+
+    // Update statistics in RealtimeDetectionService
+    try {
+      final detectionService =
+          Provider.of<RealtimeDetectionService>(context, listen: false);
+      detectionService.recalculateStatistics(_log);
+    } catch (e) {
+      debugPrint('Failed to update statistics: $e');
+    }
 
     // Restore normal debugPrint behaviour
     debugPrint = originalDebugPrint;

@@ -13,28 +13,65 @@ import 'dart:math' as math;
 class FraudDetector {
   late Interpreter _intrp;
 
-  // Thresholds for spam detection
-  static const double _spamCutoffTrusted = 0.33; // alphanumeric senders
-  static const double _spamCutoffUnverified = 0.28; // phone numbers
+  // Thresholds for spam detection (increased for better precision)
+  static const double _spamCutoffTrusted = 0.32; // alphanumeric senders
+  static const double _spamCutoffUnverified = 0.32; // phone numbers
 
   // Keywords for fallback detection when model is uncertain
   static const List<String> _spamKeywords = [
-    'win',
-    'prize',
-    'offer',
-    'discount',
-    'free',
-    'claim',
-    'cashback',
-    'loan',
-    'lakh',
-    '₹',
-    'congratulations',
-    'lottery',
-    'deal',
-    'urgent',
-    'limited time',
-    'click here'
+    // Original keywords
+    'win', 'prize', 'offer', 'discount', 'free', 'claim', 'cashback', 'loan',
+    'lakh', '₹', 'congratulations', 'lottery', 'deal', 'urgent', 'limited time',
+    'click here',
+    // Enhanced spam keywords
+    'gift', 'reward', 'bonus', 'cash', 'money', 'earn', 'income', 'profit',
+    'investment', 'scheme', 'opportunity', 'business', 'work from home',
+    'part time', 'easy money', 'guaranteed', 'instant', 'hurry', 'expires',
+    'limited offer', 'special offer', 'exclusive', 'selected', 'winner',
+    'lucky', 'surprise', 'scratch', 'coupon', 'voucher', 'code', 'redeem',
+    'activate', 'confirm', 'verify', 'update', 'suspended', 'blocked',
+    'crore', 'thousand', 'millions', 'rs.', 'rupees', 'paisa', 'amount',
+    'transfer', 'deposit', 'withdraw', 'account', 'balance', 'credit',
+    'commission', 'percentage', '%', 'daily', 'weekly', 'monthly'
+  ];
+
+  // Fraud-specific keywords (more aggressive patterns)
+  static const List<String> _fraudKeywords = [
+    'otp',
+    'pin',
+    'password',
+    'cvv',
+    'card number',
+    'debit card',
+    'credit card',
+    'bank details',
+    'account number',
+    'ifsc',
+    'mobile banking',
+    'net banking',
+    'phishing',
+    'fraud',
+    'scam',
+    'fake',
+    'suspicious',
+    'unauthorized',
+    'immediate action',
+    'act now',
+    'expire today',
+    'last chance',
+    'your account will be',
+    'suspended',
+    'closed',
+    'terminated',
+    'refund',
+    'tax refund',
+    'government',
+    'income tax',
+    'gst',
+    'kyc',
+    'documents',
+    'verification required',
+    'update kyc'
   ];
 
   // Legitimate Indian banking/telecom service patterns
@@ -83,7 +120,6 @@ class FraudDetector {
     'NSESMS',
     'CDSLEV',
     'CDSLTX',
-    'SMYTTN',
     'BFDLTS',
     'BFDLPS',
     'BSELTD'
@@ -109,7 +145,18 @@ class FraudDetector {
     'HEDKAR', // Promotions
     'BOTNIC', // Mamaearth/Botanic promotions
     'EKARTL', // E-Kart logistics
-    'RECHRG' // Recharge promotions
+    'RECHRG', // Recharge promotions
+    'SMYTTN', // Smartton promotions
+    // Additional promotional services
+    'AMAZON', 'AMZNIN', 'AJIOCOM', 'NYKAA', 'LENSKRT', 'PAYTMM',
+    'OLACABS', 'UBER', 'RAPIDO', 'DUNZO', 'BIGBSKT', 'GROFER',
+    'JOCKEY', 'ADIDAS', 'NIKE', 'PUMA', 'LEVIS', 'UCB',
+    'MCDONALD', 'KFC', 'SUBWAY', 'PIZZHUT', 'BURGKNG',
+    'HOTSTAR', 'NETFLIX', 'PRIME', 'YOUTUB', 'SPOTIFY',
+    'MAKEMT', 'POLICY', 'LENDIX', 'MONEYV', 'CRED',
+    'FREECHARGE', 'MOBIKW', 'OXIGEN', 'CITRUS',
+    'INDIGO', 'SPICEJET', 'AIRVST', 'GOIBIBO', 'MMTRIP',
+    'BYJU', 'VEDANT', 'TOPPR', 'UNACAD'
   ];
 
   static const List<String> _legitimateKeywords = [
@@ -185,35 +232,67 @@ class FraudDetector {
 
     // Enhanced classification logic
     bool isSpam;
+    bool isSuspiciousFraud = false;
 
-    if (isWeakVector) {
+    // Check for fraud keywords first (highest priority)
+    final lower = body.toLowerCase();
+    final hasFraudKeywords = _hasFraudKeywords(body);
+
+    if (hasFraudKeywords) {
+      isSpam = true;
+      isSuspiciousFraud = true;
+    } else if (isWeakVector) {
       // For weak vectors (vocabulary mismatch), use pattern-based classification
-      if (isLegitimateService || hasLegitKeywords) {
-        // Likely legitimate bank/telecom service
-        isSpam = false;
-      } else if (isPromotionalService) {
-        // E-commerce/promotional services are typically spam
+      if (isPromotionalService) {
+        // E-commerce/promotional services are always spam
         isSpam = true;
+      } else if (isLegitimateService && !isPromotionalService) {
+        // Only legitimate non-promotional services (banks/telecom)
+        isSpam = false;
+      } else if (hasLegitKeywords) {
+        // Has legitimate keywords but not a known service
+        isSpam = false;
       } else {
         // Check for spam keywords
-        final lower = body.toLowerCase();
         isSpam = _spamKeywords.any((kw) => lower.contains(kw));
       }
     } else {
       // For strong vectors, use model prediction with adjusted thresholds
-      if (isLegitimateService && combinedSpamProb < 0.7) {
-        // Give benefit of doubt to legitimate services unless very high spam probability
-        isSpam = false;
-      } else if (isPromotionalService && combinedSpamProb > 0.4) {
-        // Promotional services with moderate spam probability are likely spam
+      if (isPromotionalService && combinedSpamProb > 0.25) {
+        // Promotional services with very low spam probability are likely spam
         isSpam = true;
+      } else if (isLegitimateService &&
+          !isPromotionalService &&
+          combinedSpamProb < 0.65) {
+        // Reduced benefit of doubt threshold for legitimate services
+        isSpam = false;
       } else {
         isSpam = (combinedSpamProb >= cutoff) && (combinedSpamProb > legitProb);
       }
     }
 
-    // Fraud detection: spam + phone number pattern
-    final bool isFraud = isSpam && isPhoneNumber;
+    // Enhanced fraud detection
+    bool isFraud = false;
+    if (isSpam) {
+      // Original fraud: spam + phone number
+      if (isPhoneNumber) {
+        isFraud = true;
+      }
+      // New fraud patterns: suspicious content regardless of sender
+      else if (isSuspiciousFraud) {
+        // Messages with fraud keywords are fraud even from alphanumeric senders
+        isFraud = true;
+      }
+      // Additional fraud indicators
+      else if (combinedSpamProb > 0.8 &&
+          (_fraudKeywords.any((kw) => lower.contains(kw)) ||
+              lower.contains('otp') ||
+              lower.contains('pin') ||
+              lower.contains('cvv') ||
+              lower.contains('password'))) {
+        isFraud = true;
+      }
+    }
 
     // Final prediction
     final int prediction = isFraud ? 2 : (isSpam ? 1 : 0);
@@ -283,6 +362,11 @@ class FraudDetector {
   bool _hasLegitimateKeywords(String body) {
     final lowerBody = body.toLowerCase();
     return _legitimateKeywords.any((keyword) => lowerBody.contains(keyword));
+  }
+
+  bool _hasFraudKeywords(String body) {
+    final lowerBody = body.toLowerCase();
+    return _fraudKeywords.any((keyword) => lowerBody.contains(keyword));
   }
 
   // Lightweight helper for simple classification

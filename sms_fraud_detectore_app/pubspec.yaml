@@ -28,6 +28,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fraud_detector.tflite
+    - assets/advanced_fraud_detector.tflite
+    - assets/behavioral_model_config.json
     # optional heavier model (DistilBERT – add the file before re-enabling)
     # - assets/fraud_bert.tflite
     - assets/tfidf_vocab.json

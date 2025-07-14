@@ -3,8 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'sms_log_state.dart';
 import 'sms_log_model.dart';
-import 'fraud_detector.dart';
-import 'tfidf_preprocessor.dart';
+import 'advanced_fraud_detector.dart';
 import 'sms_log_page.dart';
 import 'theme_controller.dart';
 import 'thread_list_page.dart';
@@ -63,8 +62,7 @@ class HomePage extends StatefulWidget {
 }
 
 class HomePageState extends State<HomePage> {
-  late FraudDetector _fraudDetector;
-  late TfidfPreprocessor _preprocessor;
+  late AdvancedFraudDetector _advancedFraudDetector;
   bool _isModelLoaded = false;
   int _currentIndex = 0;
 
@@ -79,11 +77,9 @@ class HomePageState extends State<HomePage> {
   Future<void> _initializeApp() async {
     await SmsPermissionHelper.requestAll();
 
-    // Initialize basic services
-    _fraudDetector = FraudDetector();
-    await _fraudDetector.loadModel('assets/fraud_detector.tflite');
-    _preprocessor = TfidfPreprocessor();
-    await _preprocessor.loadVocab('assets/tfidf_vocab.json');
+    // Initialize advanced fraud detection service
+    _advancedFraudDetector = AdvancedFraudDetector();
+    await _advancedFraudDetector.initialize();
 
     // Initialize real-time detection service
     final detectionService =
@@ -100,7 +96,8 @@ class HomePageState extends State<HomePage> {
     await detectionService.startMonitoring();
 
     // Sync device SMS
-    await Provider.of<SmsLogState>(context, listen: false).syncDeviceSms();
+    await Provider.of<SmsLogState>(context, listen: false)
+        .syncDeviceSms(context);
 
     if (!mounted) return;
     setState(() {
@@ -351,7 +348,8 @@ class HomePageState extends State<HomePage> {
                         ),
                       )
                     : Icon(Icons.sync),
-                onPressed: state.isSyncing ? null : () => state.syncDeviceSms(),
+                onPressed:
+                    state.isSyncing ? null : () => state.syncDeviceSms(context),
                 tooltip: 'Sync SMS',
               );
             },
@@ -1112,7 +1110,7 @@ class DetectionDashboardPageState extends State<DetectionDashboardPage>
 
       // Get the state and scan all SMS using the state's sync method
       final state = Provider.of<SmsLogState>(context, listen: false);
-      await state.syncDeviceSms();
+      await state.syncDeviceSms(context);
 
       // Show completion message
       if (mounted) {
