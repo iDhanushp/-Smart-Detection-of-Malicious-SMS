@@ -206,15 +206,11 @@ Smart Detection of Malicious SMS/
 
 **⚠️ IMPORTANT PATH CORRECTION**: All active ML models are now located in the `datasetgenerateor/` folder, not the legacy `ML_Model/` folder. The production app loads models from its `assets/` folder, which contains copies of the models from `datasetgenerateor/`.
 
-## 🔄 **COMPREHENSIVE DATA PROCESSING PIPELINE**
+## 🔄 **DATA PROCESSING PIPELINE**
 
 ### **Stage 1: Data Collection & Extraction**
-
-**📱 Real SMS Data Sources**
-The system processes authentic SMS messages from multiple sources to ensure comprehensive fraud detection coverage:
-
 ```
-Primary Data Sources → datasetgenerateor/sms data set/
+Real SMS Data Sources → datasetgenerateor/sms data set/
 ├── phone_sms_export_2025-07-13T14-41-31.344697.csv (10,946 messages)
 ├── phone_sms_export_2025-07-13T14-59-37.079178.csv (1,447 messages)
 ├── phone_sms_export_2025-07-14T09-30-54.278524.csv (10,054 messages)
@@ -222,348 +218,33 @@ Primary Data Sources → datasetgenerateor/sms data set/
 Total: 28,019 authentic SMS messages
 ```
 
-**📊 Data Collection Process**:
-1. **SMS Extraction**: Using Flutter `sms_extractor` app to export real device SMS data
-2. **Data Formatting**: Converting SMS data to CSV format with standardized columns:
-   - `message`: SMS content text
-   - `sender`: Phone number or service code
-   - `timestamp`: Message received time
-   - `type`: Inbox/Sent classification
-3. **Data Validation**: Automated checks for:
-   - Empty messages removal
-   - Duplicate detection and removal
-   - Character encoding normalization (UTF-8)
-   - Phone number format standardization
-4. **Data Preprocessing**: 
-   - Text cleaning (removing extra whitespace)
-   - Special character handling
-   - Language detection and filtering
-   - Message length validation (minimum 5 characters)
-
-**🔍 Data Quality Metrics**:
-```json
-{
-  "total_raw_messages": 28019,
-  "valid_messages": 28019,
-  "duplicate_removed": 0,
-  "empty_messages_removed": 0,
-  "average_message_length": 89.3,
-  "language_distribution": {
-    "english": "95.2%",
-    "hindi": "3.1%",
-    "others": "1.7%"
-  },
-  "sender_types": {
-    "service_codes": "18,245 (65.1%)",
-    "phone_numbers": "9,774 (34.9%)"
-  }
-}
-```
-
 ### **Stage 2: Behavioral Analysis & Labeling**
-
-**🧠 Advanced Behavioral Feature Extraction**
-The system employs sophisticated behavioral analysis to identify fraud patterns:
-
 ```
-datasetgenerateor/auto_labeler.py → Comprehensive Behavioral Analysis
-├── Urgency Scoring (0-1 scale)
-├── Fear Tactics Detection
-├── Reward Scheme Identification
-├── Authority Impersonation Analysis
-├── Action Request Classification
-└── Linguistic Pattern Analysis
+datasetgenerateor/auto_labeler.py → Behavioral feature extraction
+├── Urgency scoring (0-1 scale)
+├── Fear tactics detection
+├── Reward scheme identification
+├── Authority impersonation analysis
+└── Action request classification
 ```
-
-**🎯 Detailed Behavioral Features**:
-
-**1. Urgency Indicators (Weight: 0.25)**
-- **Keywords**: "immediate", "urgent", "now", "hurry", "expire", "today", "asap"
-- **Scoring Algorithm**: Weighted keyword frequency with context analysis
-- **Context Modifiers**: Time-based urgency ("within 24 hours" = +0.3 score)
-- **Example**: "Urgent! Your account will expire in 2 hours" → Urgency Score: 0.8
-
-**2. Fear Tactics Detection (Weight: 0.20)**
-- **Keywords**: "suspended", "blocked", "penalty", "legal", "arrest", "court", "fine"
-- **Emotional Triggers**: Threat-based language patterns
-- **Authority Threats**: Government/Legal intimidation detection
-- **Example**: "Your account is suspended due to suspicious activity" → Fear Score: 0.7
-
-**3. Reward Schemes (Weight: 0.15)**
-- **Keywords**: "won", "winner", "prize", "reward", "gift", "lottery", "cash"
-- **Amount Detection**: Monetary values and percentages
-- **Probability Analysis**: Unrealistic reward claims
-- **Example**: "Congratulations! You won $50,000" → Reward Score: 0.9
-
-**4. Authority Impersonation (Weight: 0.25)**
-- **Entities**: Banks, Government, Police, Service providers
-- **Sender Verification**: Cross-check with known legitimate senders
-- **Language Patterns**: Official communication style mimicry
-- **Example**: "From SBI Bank: Update your KYC details" → Authority Score: 0.6
-
-**5. Action Request Classification (Weight: 0.15)**
-- **Keywords**: "click", "call", "send", "reply", "verify", "update", "confirm"
-- **Link Analysis**: URL detection and validation
-- **Phone Number Requests**: Premium rate number identification
-- **Example**: "Click here to verify: bit.ly/xyz123" → Action Score: 0.8
-
-**📈 Behavioral Scoring Algorithm**:
-```python
-def calculate_behavioral_score(message):
-    urgency_score = extract_urgency_indicators(message) * 0.25
-    fear_score = detect_fear_tactics(message) * 0.20
-    reward_score = identify_reward_schemes(message) * 0.15
-    authority_score = analyze_authority_impersonation(message) * 0.25
-    action_score = classify_action_requests(message) * 0.15
-    
-    total_score = urgency_score + fear_score + reward_score + authority_score + action_score
-    return min(1.0, total_score)  # Cap at 1.0
-```
-
-**🏷️ Automated Labeling Process**:
-1. **Rule-Based Initial Classification**: 
-   - Behavioral score > 0.7 → FRAUD
-   - Behavioral score 0.3-0.7 → SPAM
-   - Behavioral score < 0.3 → LEGITIMATE
-2. **Manual Review & Correction**: Human verification of edge cases
-3. **Iterative Refinement**: Continuous improvement based on feedback
-4. **Quality Assurance**: Random sampling for accuracy validation
 
 ### **Stage 3: Model Training & Export**
-
-**🤖 Advanced TensorFlow Model Training**
-Comprehensive neural network training with behavioral and textual features:
-
 ```
 datasetgenerateor/train_hybrid_classifier.py → TensorFlow Model Training
-├── Data Preparation & Feature Engineering
-├── Neural Network Architecture Design
-├── Training Configuration & Optimization
-├── Model Evaluation & Validation
-└── TensorFlow Lite Export & Optimization
+├── Neural Network: 1005 → 128 → 64 → 32 → 3 classes
+├── TF-IDF vectorization (1000 features)
+├── Behavioral scoring (5 features)
+├── Training: 20 epochs, batch size 32
+└── Export: full_dataset_3class_fraud_detector.tflite (145.1 KB)
 ```
-
-**📊 Detailed Training Process**:
-
-**1. Data Preparation**:
-```python
-# Feature Engineering Pipeline
-text_features = TfidfVectorizer(
-    max_features=1000,
-    ngram_range=(1, 2),
-    stop_words='english'
-)
-
-behavioral_features = StandardScaler()
-label_encoder = LabelEncoder()
-
-# Data Split
-X_train, X_test, y_train, y_test = train_test_split(
-    features, labels, 
-    test_size=0.2, 
-    stratify=labels, 
-    random_state=42
-)
-```
-
-**2. Neural Network Architecture**:
-```python
-model = Sequential([
-    Dense(128, activation='relu', input_shape=(1005,)),
-    Dropout(0.3),
-    Dense(64, activation='relu'),
-    Dropout(0.2),
-    Dense(32, activation='relu'),
-    Dense(3, activation='softmax')  # 3 classes
-])
-
-model.compile(
-    optimizer=Adam(learning_rate=0.001),
-    loss='categorical_crossentropy',
-    metrics=['accuracy', 'precision', 'recall']
-)
-```
-
-**3. Training Configuration**:
-- **Epochs**: 20 with early stopping
-- **Batch Size**: 32 for optimal GPU utilization
-- **Validation Split**: 20% for hyperparameter tuning
-- **Learning Rate**: 0.001 with decay schedule
-- **Regularization**: L2 regularization + Dropout
-
-**4. Model Evaluation Metrics**:
-```json
-{
-  "training_accuracy": "98.2%",
-  "validation_accuracy": "97.86%",
-  "test_accuracy": "97.86%",
-  "class_performance": {
-    "LEGITIMATE": {"precision": 0.98, "recall": 0.99, "f1": 0.99},
-    "SPAM": {"precision": 0.97, "recall": 0.90, "f1": 0.93},
-    "FRAUD": {"precision": 0.94, "recall": 0.96, "f1": 0.95}
-  },
-  "confusion_matrix": {
-    "true_positives": 5603,
-    "false_positives": 125,
-    "false_negatives": 98,
-    "true_negatives": 5571
-  }
-}
-```
-
-**5. TensorFlow Lite Export**:
-```python
-# Model Quantization for Mobile Deployment
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
-converter.optimizations = [tf.lite.Optimize.DEFAULT]
-converter.representative_dataset = representative_dataset
-converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-converter.inference_input_type = tf.int8
-converter.inference_output_type = tf.int8
-
-tflite_model = converter.convert()
-```
-
-**📁 Generated Model Files**:
-- `full_dataset_3class_fraud_detector.tflite` (145.1 KB)
-- `full_dataset_3class_model_config.json` (metadata)
-- `full_dataset_3class_scaler.pkl` (feature scaling)
-- `full_dataset_3class_vectorizer.pkl` (text vectorization)
 
 ### **Stage 4: Production Deployment**
-
-**🚀 Comprehensive Production Integration**
-End-to-end deployment pipeline with real-time inference capabilities:
-
 ```
-Production Deployment Pipeline:
 datasetgenerateor/models → sms_fraud_detectore_app/assets/
-├── Model Asset Integration
-├── Flutter Application Setup
-├── Real-time Inference Engine
-├── Performance Monitoring
-└── Continuous Integration/Deployment
-```
-
-**📱 Flutter App Integration Details**:
-
-**1. Asset Management**:
-```yaml
-# pubspec.yaml
-flutter:
-  assets:
-    - assets/full_dataset_3class_fraud_detector.tflite
-    - assets/advanced_behavioral_model.pkl
-    - assets/model_config.json
-    - assets/tfidf_vocabulary.json
-```
-
-**2. Advanced Fraud Detector Class**:
-```dart
-class AdvancedFraudDetector {
-  late tflite.Interpreter _interpreter;
-  late Map<String, dynamic> _config;
-  late List<String> _vocabulary;
-  
-  Future<void> initialize() async {
-    // Load TensorFlow Lite model
-    await _loadModel();
-    
-    // Load configuration and vocabulary
-    await _loadConfig();
-    await _loadVocabulary();
-    
-    // Warm up model
-    await _warmUpModel();
-  }
-  
-  Future<Map<String, dynamic>> detectFraud(String message) async {
-    final startTime = DateTime.now();
-    
-    // Feature extraction
-    final features = await _extractFeatures(message);
-    
-    // Model inference
-    final prediction = await _runInference(features);
-    
-    // Post-processing
-    final result = _processPrediction(prediction);
-    
-    final processingTime = DateTime.now().difference(startTime);
-    
-    return {
-      'class': result['class'],
-      'confidence': result['confidence'],
-      'behavioral_scores': result['behavioral_scores'],
-      'processing_time': '${processingTime.inMilliseconds}ms'
-    };
-  }
-}
-```
-
-**3. Real-time Processing Performance**:
-```json
-{
-  "initialization_time": "200-300ms",
-  "per_message_inference": "1-6ms",
-  "memory_usage": "~15MB",
-  "cpu_utilization": "< 5%",
-  "battery_impact": "Minimal",
-  "supported_devices": "Android 7.0+, iOS 11.0+"
-}
-```
-
-**4. Batch Processing Capabilities**:
-- **Batch Size**: 100 messages per batch
-- **Processing Speed**: 11 batches in ~30 seconds
-- **Memory Management**: Automatic garbage collection
-- **Error Handling**: Graceful fallback for processing failures
-
-**5. Production Monitoring**:
-```dart
-class ProductionMonitor {
-  static void logDetection(String message, Map<String, dynamic> result) {
-    final logEntry = {
-      'timestamp': DateTime.now().toIso8601String(),
-      'message_hash': _hashMessage(message),
-      'classification': result['class'],
-      'confidence': result['confidence'],
-      'processing_time': result['processing_time']
-    };
-    
-    // Log to analytics service
-    _sendToAnalytics(logEntry);
-  }
-}
-```
-
-**📊 Production Validation Results**:
-```json
-{
-  "deployment_environment": "Production",
-  "validation_period": "July 15, 2025",
-  "test_dataset": {
-    "total_messages": 1083,
-    "processing_batches": 11,
-    "average_batch_size": 98.5
-  },
-  "performance_metrics": {
-    "processing_speed": "3-5ms average",
-    "accuracy": "Real-time validation successful",
-    "memory_efficiency": "15MB peak usage",
-    "error_rate": "0% (no processing failures)"
-  },
-  "classification_results": {
-    "legitimate": "382 messages (35.3%)",
-    "spam": "309 messages (28.5%)",
-    "fraud": "392 messages (36.2%)"
-  },
-  "confidence_distribution": {
-    "high_confidence": "847 messages (78.2%)",
-    "medium_confidence": "198 messages (18.3%)",
-    "low_confidence": "38 messages (3.5%)"
-  }
-}
+├── Copy full_dataset_3class_fraud_detector.tflite
+├── Copy advanced_behavioral_model.pkl
+├── Flutter app integration
+└── Real-time inference (1-6ms per message)
 ```
 
 ## 🎯 **PRODUCTION IMPLEMENTATION**

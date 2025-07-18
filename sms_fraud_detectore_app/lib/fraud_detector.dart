@@ -242,12 +242,12 @@ class FraudDetector {
       isSpam = true;
       isSuspiciousFraud = true;
     } else if (isWeakVector) {
-      // For weak vectors (vocabulary mismatch), use pattern-based classification
+      // For weak vectors (vocabulary mismatch), use pattern-based classification as fallback
       if (isPromotionalService) {
-        // E-commerce/promotional services are always spam
+        // E-commerce/promotional services are likely spam when model can't decide
         isSpam = true;
       } else if (isLegitimateService && !isPromotionalService) {
-        // Only legitimate non-promotional services (banks/telecom)
+        // Only use legitimate services as tie-breaker, not override
         isSpam = false;
       } else if (hasLegitKeywords) {
         // Has legitimate keywords but not a known service
@@ -257,17 +257,23 @@ class FraudDetector {
         isSpam = _spamKeywords.any((kw) => lower.contains(kw));
       }
     } else {
-      // For strong vectors, use model prediction with adjusted thresholds
-      if (isPromotionalService && combinedSpamProb > 0.25) {
-        // Promotional services with very low spam probability are likely spam
-        isSpam = true;
-      } else if (isLegitimateService &&
-          !isPromotionalService &&
-          combinedSpamProb < 0.65) {
-        // Reduced benefit of doubt threshold for legitimate services
-        isSpam = false;
-      } else {
+      // For strong vectors, TRUST THE ML MODEL - use pattern as tie-breaker only
+      final modelConfidence = math.max(legitProb, combinedSpamProb);
+      final isModelConfident = modelConfidence >= 0.65;
+      
+      if (isModelConfident) {
+        // Trust ML model when confident
         isSpam = (combinedSpamProb >= cutoff) && (combinedSpamProb > legitProb);
+      } else {
+        // Use sender patterns as tie-breaker when model is uncertain
+        if (isPromotionalService && combinedSpamProb > 0.25) {
+          isSpam = true;
+        } else if (isLegitimateService && !isPromotionalService && combinedSpamProb < 0.5) {
+          // Only give benefit of doubt when model is truly uncertain
+          isSpam = false;
+        } else {
+          isSpam = (combinedSpamProb >= cutoff) && (combinedSpamProb > legitProb);
+        }
       }
     }
 
@@ -297,38 +303,45 @@ class FraudDetector {
     // Final prediction
     final int prediction = isFraud ? 2 : (isSpam ? 1 : 0);
 
-    // Debug logging
-    print('DETECT sender="$sender" '
-        'legit=${legitProb.toStringAsFixed(3)} '
-        'spam=${combinedSpamProb.toStringAsFixed(3)} '
-        'cutoff=${cutoff.toStringAsFixed(2)} '
-        'vecNZ=$nonZero vecNorm=${magnitude.toStringAsFixed(4)} '
-        'phone=$isPhoneNumber '
-        'legit_svc=$isLegitimateService '
-        'promo_svc=$isPromotionalService '
-        'weak=$isWeakVector '
-        '-> pred=$prediction');
+    // Debug logging - commented out to reduce noise
+    // if (prediction > 0) {
+    //   print('DETECT sender="$sender" '
+    //       'legit=${legitProb.toStringAsFixed(3)} '
+    //       'spam=${combinedSpamProb.toStringAsFixed(3)} '
+    //       'cutoff=${cutoff.toStringAsFixed(2)} '
+    //       'vecNZ=$nonZero vecNorm=${magnitude.toStringAsFixed(4)} '
+    //       'phone=$isPhoneNumber '
+    //       'legit_svc=$isLegitimateService '
+    //       'promo_svc=$isPromotionalService '
+    //       'weak=$isWeakVector '
+    //       '-> pred=$prediction');
+    // }
 
     // Generate reason
+    final modelConfidence = math.max(legitProb, combinedSpamProb);
+    final isModelConfident = modelConfidence >= 0.65;
+    
     String reason;
     if (isFraud) {
       reason =
           'Fraud: spam from phone number (+${sender.length > 1 ? sender.substring(1, math.min(4, sender.length)) : sender})';
     } else if (isSpam) {
-      if (isPromotionalService) {
-        reason = 'Spam: Promotional/E-commerce message';
+      if (isPromotionalService && !isModelConfident) {
+        reason = 'Spam: Promotional service (tie-breaker)';
+      } else if (isPromotionalService) {
+        reason = 'Spam: Promotional message with ${(combinedSpamProb * 100).toStringAsFixed(1)}% confidence';
       } else {
-        reason =
-            'Spam: ${(combinedSpamProb * 100).toStringAsFixed(1)}% confidence';
+        reason = 'Spam: ${(combinedSpamProb * 100).toStringAsFixed(1)}% ML confidence';
       }
     } else {
-      if (isLegitimateService) {
-        reason = 'Legitimate: Bank/Telecom service';
-      } else if (hasLegitKeywords) {
-        reason = 'Legitimate: Contains banking/service keywords';
+      if (isLegitimateService && !isModelConfident) {
+        reason = 'Legitimate: Service sender (tie-breaker)';
+      } else if (isLegitimateService && isModelConfident) {
+        reason = 'Legitimate: ${(legitProb * 100).toStringAsFixed(1)}% ML confidence + verified service';
+      } else if (hasLegitKeywords && !isModelConfident) {
+        reason = 'Legitimate: Service keywords (tie-breaker)';
       } else {
-        reason =
-            'Legitimate: ${(legitProb * 100).toStringAsFixed(1)}% confidence';
+        reason = 'Legitimate: ${(legitProb * 100).toStringAsFixed(1)}% ML confidence';
       }
     }
 
@@ -341,12 +354,6 @@ class FraudDetector {
       'spamProbability': combinedSpamProb,
       'legitProbability': legitProb,
     };
-  }
-
-  bool _isIndianServiceSender(String sender) {
-    final upperSender = sender.toUpperCase();
-    return _legitimateBankCodes.any((code) => upperSender.contains(code)) ||
-        _promotionalCodes.any((code) => upperSender.contains(code));
   }
 
   bool _isLegitimateServiceSender(String sender) {

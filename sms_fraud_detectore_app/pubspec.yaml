@@ -30,6 +30,10 @@ flutter:
     - assets/fraud_detector.tflite
     - assets/advanced_fraud_detector.tflite
     - assets/behavioral_model_config.json
+    - assets/full_dataset_3class_fraud_detector.tflite
+    - assets/full_dataset_3class_model_config.json
+    - assets/full_dataset_3class_scaler.pkl
+    - assets/full_dataset_3class_vectorizer.pkl
     # optional heavier model (DistilBERT – add the file before re-enabling)
     # - assets/fraud_bert.tflite
     - assets/tfidf_vocab.json

@@ -1,0 +1,50 @@
+digraph SmartSMSArchitecture {
+    rankdir=TB;
+    node [shape=box, fontname="Arial"];
+    edge [fontname="Arial"];
+    
+    // Title
+    label="Fig. 1. Smart SMS Detection System Architecture\n\nThe system processes SMS data through neural network training to create TensorFlow Lite models.\nFlutter app uses dual detection system for real-time fraud protection with 97.86% accuracy.";
+    labelloc="t";
+    fontsize=12;
+    fontname="Arial";
+    
+    // Data Collection & Processing
+    sms_extractor [label="SMS Extractor"];
+    data_pipeline [label="Data Processing"];
+    
+    // Machine Learning
+    neural_network [label="Neural Network"];
+    behavioral_model [label="Behavioral Model"];
+    
+    // Model Deployment
+    tflite_primary [label="Primary TFLite"];
+    tflite_behavioral [label="Behavioral TFLite"];
+    
+    // Flutter Application
+    advanced_detector [label="AdvancedFraudDetector"];
+    fallback_detector [label="FraudDetector"];
+    realtime_service [label="RealtimeDetectionService"];
+    
+    // Real-time Processing
+    sms_receiver [label="SMS Receiver"];
+    classification [label="Classification Engine"];
+    user_interface [label="User Interface"];
+    
+    // Data Flow
+    sms_extractor -> data_pipeline;
+    data_pipeline -> neural_network;
+    data_pipeline -> behavioral_model;
+    neural_network -> tflite_primary;
+    behavioral_model -> tflite_behavioral;
+    tflite_primary -> advanced_detector;
+    tflite_behavioral -> advanced_detector;
+    tflite_behavioral -> fallback_detector;
+    advanced_detector -> realtime_service;
+    fallback_detector -> realtime_service;
+    realtime_service -> sms_receiver;
+    sms_receiver -> classification;
+    classification -> user_interface;
+}
+}
+}

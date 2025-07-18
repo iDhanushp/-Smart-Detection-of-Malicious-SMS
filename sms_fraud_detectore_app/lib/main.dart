@@ -75,39 +75,61 @@ class HomePageState extends State<HomePage> {
   }
 
   Future<void> _initializeApp() async {
-    await SmsPermissionHelper.requestAll();
+    try {
+      print('🚀 Starting app initialization...');
+      
+      await SmsPermissionHelper.requestAll();
+      print('✅ SMS permissions granted');
 
-    // Initialize advanced fraud detection service
-    _advancedFraudDetector = AdvancedFraudDetector();
-    await _advancedFraudDetector.initialize();
+      // Initialize advanced fraud detection service
+      _advancedFraudDetector = AdvancedFraudDetector();
+      await _advancedFraudDetector.initialize();
+      print('✅ Advanced fraud detector initialized');
 
-    // Initialize real-time detection service
-    final detectionService =
-        Provider.of<RealtimeDetectionService>(context, listen: false);
-    await detectionService.initialize();
+      // Initialize real-time detection service
+      final detectionService =
+          Provider.of<RealtimeDetectionService>(context, listen: false);
+      await detectionService.initialize();
+      print('✅ Real-time detection service initialized');
 
-    // Set up detection callbacks
-    detectionService.onDetectionResult = (entry) => _onDetectionResult(entry);
-    detectionService.onError = (error) => _onDetectionError(error);
-    detectionService.onMonitoringStarted = () => _onMonitoringStarted();
-    detectionService.onMonitoringStopped = () => _onMonitoringStopped();
+      // Set up detection callbacks
+      detectionService.onDetectionResult = (entry) => _onDetectionResult(entry);
+      detectionService.onError = (error) => _onDetectionError(error);
+      detectionService.onMonitoringStarted = () => _onMonitoringStarted();
+      detectionService.onMonitoringStopped = () => _onMonitoringStopped();
 
-    // Start real-time monitoring
-    await detectionService.startMonitoring();
+      // Start real-time monitoring
+      await detectionService.startMonitoring();
+      print('✅ Real-time monitoring started');
 
-    // Sync device SMS
-    await Provider.of<SmsLogState>(context, listen: false)
-        .syncDeviceSms(context);
+      // Sync device SMS (this might take a while for large SMS databases)
+      print('🔄 Starting SMS sync...');
+      await Provider.of<SmsLogState>(context, listen: false)
+          .syncDeviceSms(context);
+      print('✅ SMS sync completed');
 
-    if (!mounted) return;
-    setState(() {
-      _isModelLoaded = true;
-      _pages.addAll([
-        ThreadListPage(),
-        const RealtimeDetectionDashboard(),
-        SmsLogPage(),
-      ]);
-    });
+      if (!mounted) return;
+      setState(() {
+        _isModelLoaded = true;
+        _pages.addAll([
+          ThreadListPage(),
+          const RealtimeDetectionDashboard(),
+          SmsLogPage(),
+        ]);
+      });
+      print('✅ App initialization completed');
+    } catch (e) {
+      print('❌ Error during app initialization: $e');
+      if (!mounted) return;
+      setState(() {
+        _isModelLoaded = true; // Show the app anyway, even if sync failed
+        _pages.addAll([
+          ThreadListPage(),
+          const RealtimeDetectionDashboard(),
+          SmsLogPage(),
+        ]);
+      });
+    }
 
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
