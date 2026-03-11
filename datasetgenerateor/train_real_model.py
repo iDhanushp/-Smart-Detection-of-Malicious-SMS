@@ -73,7 +73,7 @@ def _money_rewards(t):
     return any(k in t for k in ['₹','lakh','crore','cash','money','amount'])
 
 def _has_url(t):
-    return bool(re.search(r'https?://|www\.|\.com|\.in|\.org', t))
+    return bool(re.search(r'https?://|www\.|wa\.me/|\.(com|in|org|io|co)', t))
 
 def _has_phone(t):
     return bool(re.search(r'\b\d{10,}\b', t))
@@ -197,7 +197,8 @@ def extract_features(body: str, sender: str):
 # Known legitimate Indian DLT service sender suffixes
 LEGIT_SENDER_BRANDS = {
     # Telecoms
-    'AIRTEL','ARWINF','ARWNFO','ARINFO','650022','650025','650002','602607','602604',
+    'AIRTEL','ARWINF','ARWNFO','ARINFO',
+    '650001','650002','650003','650022','650025','650026','602607','602604',  # Airtel short codes
     'JIOVOC','JIOCIN','VODAFO','VODAFN','BSNL','MTNNL','IDEA',
     # Banks & Finance
     'SBIINB','SBIPAY','HDFCBK','ICICIB','AXISBK','CANBNK','KOTAKA','KOTAKB',
@@ -217,6 +218,24 @@ LEGIT_SENDER_BRANDS = {
     'DSCENG','ISBRPG','DSUEDU','LOHITS','JKSHAH','PREUNI','MSRSBG',
     # Crypto/fintech (legit)
     'CRED', 'NAVI',
+    # Investment / Brokerage / MF DLT senders (were missing → caused false FRAUD labels)
+    'ANGONE',            # Angel One brokerage
+    'UTIMFS',            # UTI Mutual Fund
+    'NIMFND','NIMFNF',   # Nippon India MF
+    'IDBIBK',            # IDBI Bank
+    'ONJPTR','JPTR',     # Jupiter (OneCard / Jupiter Bank)
+    'NSEIND','BSEIND',   # NSE / BSE
+    'ZERODH','ZEROD',    # Zerodha
+    'UPSTOX',            # Upstox
+    'GROWW',             # Groww
+    'KUVERA',            # Kuvera MF
+    'SBIMFS',            # SBI Mutual Fund
+    'HDFCMF',            # HDFC Mutual Fund
+    'ICICIM',            # ICICI MF
+    'AXISMF',            # Axis MF
+    'MIRAE',             # Mirae Asset MF
+    'NIPPON',            # Nippon India
+    'PVRVIP','PVRPAY',   # PVR Cinemas
 }
 
 # Sender codes known to be SPAM (promotional, gambling, rummy)
@@ -232,6 +251,32 @@ SPAM_SENDER_BRANDS = {
 LEGIT_PREFIXES = {'AX','AD','VM','VK','TX','JD','JM','JK','BG','BW','BP',
                   'BH','BT','BZ','CP','QP','TM','VD','VK','VN','TP'}
 
+# ─── trusted URL patterns (phone-sender + trusted domain = legit) ────────────
+# These are real services whose notification links arrive from phone numbers
+# (e.g. Airtel missed-call app, Google Maps share, WhatsApp invite, BBMP portal).
+# Matching any of these prevents the URL-scam rules from mislabeling them.
+TRUSTED_URL_PATTERNS = [
+    r'i\.airtel\.in',           # Airtel missed-call notification service
+    r'maps\.google\.com',       # Google Maps location share
+    r'splitwise\.com',          # Splitwise group invite
+    r'whatsapp\.com/dl/',       # WhatsApp deep link invite
+    r'bbmpgov\.in',             # BBMP government portal (election duty)
+    r'utimf\.com',              # UTI Mutual Fund portal
+    r'nipponindia\.com',        # Nippon India MF portal
+    r'app\.jupiter\.money',     # Jupiter Bank app deep link
+    r'bflcomm\.in',             # Bajaj Finance (EMI card status)
+    r'pvr\.im',                 # PVR Cinemas promo link
+    r'amazon\.in/a/c',          # Amazon account / OTP link
+    r'ewsbm\.com',              # East West School of Business
+    r'sindhicollege\.com',      # Sindhi College
+    r'forms\.gle',              # Google Forms (educational institutions)
+    # NOTE: generic college event promo URLs are NOT here — they are SPAM.
+]
+
+def _has_trusted_url(t: str) -> bool:
+    """True if text contains a URL from a known-legitimate domain."""
+    return any(re.search(p, t) for p in TRUSTED_URL_PATTERNS)
+
 
 def label_message(address: str, body: str) -> str:
     """
@@ -242,23 +287,80 @@ def label_message(address: str, body: str) -> str:
     t    = body.lower()
     s_up = s.upper()
 
-    # ── Rule 1: phone-number sender → likely fraud if scam content ──────────
+    # ── Rule 1: phone-number sender ────────────────────────────────────────
     if _is_phone_sender(s):
-        # Known scam patterns from personal numbers
-        scam_content = [
-            r'(h0me|home).{0,20}(job|j0b)',
-            r'(earn|income|salary).{0,30}(day|daily|month)',
-            r'(rs\.?\s*\d{3,}|₹\s*\d{3,}).{0,30}(day|daily|hour)',
-            r'wa\.me/\d+',
-            r'(won|winner|selected|lucky).{0,60}(rs\.?|₹|\d{4,}|lakh|crore)',
-            r'(congratulations|congrats).{0,60}(rummy|bonus|cash|prize)',
-            r'(register|download).{0,30}(rummy|game|play)',
-            r'http[s]?://(?!www\.(amazon|flipkart|irctc|paytm|phonepe|google))',
+        # ── 1a. Trusted-domain shortcut: legitimate app sending via phone number
+        #        (Airtel missed-call service, Google Maps share, WhatsApp invite,
+        #         BBMP election duty, UTI MF portal, etc.) ─────────────────────
+        if _has_trusted_url(t):
+            return 'legit'
+
+        # ── 1b. Brand/Regulator impersonation from a phone number → FRAUD ────────
+        #  Strategy: check if the BODY mentions a known institution AND a financial
+        #  claim/phishing indicator ANYWHERE (not just directionally).
+        #  This catches patterns like "HSBC Securities ... Rs 305760 ... profits"
+        #  where the brand name appears AFTER the money claim.
+        brand_impersonation = [
+            # HSBC / Barclays fake broker messages
+            r'(?=.*(?:hsbc|barclays))(?=.*(?:rs\s*\d{4,}|member|earned|profits?|returns?|advice|guidance|success|stock\s*(?:market|update)|financial))',  # noqa: E501
+            # INDIRA fake investment advisory
+            r'(?=.*(?:indira))(?=.*(?:rs\s*\d{4,}|profits?|stock\s*market|invest|securit|expert\s*advice))',
+            # RBI backing/listing scheme
+            r'rbi.{0,20}(?:list(?:ed|ing)|backed?|approved|confirmed)',
+            # SBI YONO obfuscated phishing
+            r's\.?b[,\.]?i.{0,5}y[o0]n[o0]',
+            # Axis Bank / HDFC Bank from phone number + any URL anywhere in body
+            r'(?=.*(?:axis\s*bank|hdfc\s*bank|icici\s*bank|kotak\s*bank|sbi\s+(?:bank|personal)))'
+            r'(?=.*(?:https?://|wa\.me/|bit\.ly|epq9|tinyurl))',
+            # Fake BHIM / UPI credit → withdraw / cash out
+            r'(?:bhim|upi).{0,60}(?:withdraw|cash\s*now|get\s*cash)',
+            # Fake government scheme (MSME / Bima Yojana) — must have URL somewhere in body
+            r'(?=.*(?:msme|bima\s*yojana))(?=.*(?:lakh|crore|credited|approved))(?=.*(?:http|\.in/|\.com/))',
+            # Fake trading platform
+            r'(?:goldify|goldifyapp)',
+            # Data-harvest phishing — "confirm few details"
+            r'confirm.{0,20}(?:few|your)\s*details.{0,30}http',
+            # Fake transaction notification → withdraw now (disguised as Rummy credit)
+            r'transaction.{0,60}rs\.?\s*\d{4,}.{0,60}withdraw',
         ]
-        for pat in scam_content:
-            if re.search(pat, t):
+        for pat in brand_impersonation:
+            if re.search(pat, t, re.IGNORECASE):
                 return 'fraud'
-        # If phone sender with URL → suspicious spam
+
+        # ── 1c. High-confidence FRAUD patterns (brand-agnostic but clearly criminal) ──
+        #        Home-job + WA redirect, video-KYC gate
+        clear_fraud = [
+            r'(?:h0me|home).{0,20}(?:j0b|job).{0,60}wa\.me',  # h0me job + WA redirect
+            r'(?:video.?kyc|videokyc).{0,60}(?:blocked|activate|account)',  # KYC-gate phishing
+        ]
+        for pat in clear_fraud:
+            if re.search(pat, t, re.IGNORECASE):
+                return 'fraud'
+
+        # ── 1d. SPAM patterns (gambling, prize-bait, work-from-home, app referrals) ──
+        #        These are unsolicited promotions — annoying but not identity theft.
+        spam_promo = [
+            r'(earn|income|salary).{0,30}(per\s*day|per\s*month|/day|/month|a\s*month)',
+            r'(rs\.?\s*\d{3,}|₹\s*\d{3,}).{0,30}(per\s*day|per\s*month|/day|a\s*month)',
+            r'(won|winner|selected|lucky|eligible).{0,40}(free\s*gift|purifier|voucher|kent|prize)',
+            r'(congratulations|congrats).{0,60}(rummy|casino|poker|fantasy|bonus)',
+            r'(register|play|win).{0,30}(rummy|poker|casino|fantasy)',
+            r'rummy.{0,40}(bonus|welcome|account|cash)',
+            r'paper\s*plate|led\s+bulb|paaku|buyback.{0,20}(raw\s*material|agreement)',  # WFH scam products
+            r'(pi\s+is\s+a\s+new|pi\s+network|minepi\.com)',  # Pi crypto MLM
+            r'(nojoto|talent.{0,20}earn|talent.{0,20}money)',   # app referral spam
+            r'(car\s+insurance|bike\s+insurance).{0,30}(renew|80%|off)',
+            r'n95\s+mask|n95mask',
+            r'navratri.{0,60}registr',                         # college event spam
+        ]
+        for pat in spam_promo:
+            if re.search(pat, t, re.IGNORECASE):
+                return 'spam'
+
+        # ── 1e. Remaining phone-sender patterns ──────────────────────────────
+        if re.search(r'(h0me|home).{0,20}(j0b|job)', t):  # h0me job without wa.me
+            return 'spam'
+        # Any remaining URL from a phone sender → treat as spam (investment tips, etc.)
         if _has_url(t):
             return 'spam'
         return 'legit'  # personal SMS between people
@@ -277,10 +379,11 @@ def label_message(address: str, body: str) -> str:
     for legit in LEGIT_SENDER_BRANDS:
         if legit in s_up:
             # Even legit senders can have fraud-injected content
-            # Only override if body is extremely suspicious
+            # Only override if body is extremely suspicious.
+            # Use \b so "unblocked" (Bajaj Finance EMI) doesn't match \bblocked\b.
             fraud_override = [
                 r'(verify|update).{0,30}(aadhaar|kyc|pan).{0,30}(expire|suspend)',
-                r'(your account|card).{0,20}(suspended|blocked).{0,40}(click|link|call)',
+                r'(your account|card).{0,20}\b(suspended|blocked|deactivated)\b.{0,40}(click|link|call)',
             ]
             for pat in fraud_override:
                 if re.search(pat, t):
@@ -314,9 +417,15 @@ def label_message(address: str, body: str) -> str:
             return 'spam'
 
     # ── Rule 6: content-only fraud patterns ──────────────────────────────────
+    # NOTE: patterns must be PRECISE — avoid matching legitimate investment
+    # language like "blocked investment amount...UPI mandate expiry" (Angel One).
     fraud_patterns = [
-        (r'(suspended|blocked|deactivated).{0,60}(account|card|upi)', 'account_threat'),
-        (r'(kyc|aadhaar|aadhar|pan).{0,40}(expire|update|verify)', 'kyc_fraud'),
+        # — account_threat: use \b to NOT match "unblocked" (Bajaj Finance EMI message);
+        #   also catches "Account BLOCKED" (CP-MPOKKT) where subject precedes predicate.
+        (r'(?:account|card)\s+\b(blocked|suspended|deactivated)\b'
+         r'|\b(?:your\s+)?(?:account|card)\b.{0,40}\b(?:suspended|deactivated)\b', 'account_threat'),
+        # KYC fraud — needs urgency verb after the KYC mention
+        (r'(kyc|aadhaar|aadhar|pan).{0,40}(expire|expired|update\s*now|verify\s*now|complete\s*kyc|link\s*expire)', 'kyc_fraud'),
         (r'(legal action|court|arrest|fir|police).{0,40}(file|case|action)', 'legal_threat'),
         (r'(unauthorized|suspicious).{0,40}(transaction|login|access)', 'fraud_alert'),
         (r'(income.?tax|irdai|sebi).{0,60}(verify|update|notice)', 'impersonation'),
@@ -362,7 +471,38 @@ print("\n🏷️  Auto-labeling phone SMS...")
 phone_df['label'] = phone_df.apply(
     lambda r: label_message(r['sender'], r['body']), axis=1)
 
-print(f"   Label distribution:\n{phone_df['label'].value_counts()}")
+print(f"   Label distribution (before seed-patch):\n{phone_df['label'].value_counts()}")
+
+# ── Seed-patch: override auto-labels with human-corrected ground truth ────────
+# fraud_samples_corrected.csv contains 117 manually verified labels that break
+# the circular loop — the model trains on human understanding, not the same
+# heuristics it uses at runtime.
+CORRECTED_PATH = os.path.join(os.path.dirname(__file__), 'fraud_samples_corrected.csv')
+if os.path.exists(CORRECTED_PATH):
+    corrections = pd.read_csv(CORRECTED_PATH, dtype=str).fillna('')
+    # Build lookup: exact body text → corrected label
+    body_to_label = dict(
+        zip(corrections['body'].str.strip(), corrections['corrected_label'].str.strip())
+    )
+    overridden, label_changes = 0, {}
+    for idx, row in phone_df.iterrows():
+        b = str(row['body']).strip()
+        if b in body_to_label:
+            old_lbl = phone_df.at[idx, 'label']
+            new_lbl = body_to_label[b]
+            if old_lbl != new_lbl:
+                phone_df.at[idx, 'label'] = new_lbl
+                key = f'{old_lbl}->{new_lbl}'
+                label_changes[key] = label_changes.get(key, 0) + 1
+                overridden += 1
+    print(f"\n   📌 Seed-patch applied: {overridden} auto-labels corrected from human review")
+    for k, v in sorted(label_changes.items()):
+        print(f"      {k}: {v}")
+else:
+    print("   ⚠️  fraud_samples_corrected.csv not found — seed-patch skipped")
+    print("       Run relabel_fraud_samples.py first to generate it.")
+
+print(f"\n   Label distribution (after seed-patch):\n{phone_df['label'].value_counts()}")
 
 # ── combine ────────────────────────────────────────────────────────────────────
 combined = pd.concat([
@@ -451,12 +591,41 @@ history = model.fit(
 )
 
 # ── evaluate ──────────────────────────────────────────────────────────────────
-print("\n📈 Evaluation on validation set:")
+print("\n📈 Evaluation on random val split:")
 y_pred = np.argmax(model.predict(X_val), axis=1)
 print(classification_report(y_val, y_pred,
       target_names=['LEGIT','SPAM','FRAUD']))
 print("Confusion matrix:")
 print(confusion_matrix(y_val, y_pred))
+
+# ── human-labeled validation (held-out, not used in training) ─────────────────
+# This measures TRUE generalisation — how well the model understands messages
+# the way a human does, independent of the auto-labeling heuristics.
+if os.path.exists(CORRECTED_PATH):
+    print("\n🧪 Human-labeled validation (117 manually reviewed messages):")
+    hl_df = pd.read_csv(CORRECTED_PATH, dtype=str).fillna('')
+    hl_df = hl_df[hl_df['corrected_label'].isin(['legit','spam','fraud'])]
+    hl_X, hl_y = [], []
+    for _, r in hl_df.iterrows():
+        feats  = extract_features(str(r.get('body','')), str(r.get('sender','UNKNOWN')))
+        normed = ((np.array(feats, dtype=np.float32) - scaler.mean_) / scaler.scale_)
+        hl_X.append(normed)
+        hl_y.append(label_map[r['corrected_label']])
+    hl_pred = np.argmax(model.predict(np.array(hl_X)), axis=1)
+    print(classification_report(np.array(hl_y), hl_pred,
+          target_names=['LEGIT','SPAM','FRAUD']))
+    print("Confusion matrix (human-labeled):")
+    print(confusion_matrix(np.array(hl_y), hl_pred))
+    # Gap between val-set accuracy and human-set accuracy reveals overfitting to auto-labels
+    human_acc = (np.array(hl_y) == hl_pred).mean()
+    auto_acc  = (y_val == y_pred).mean()
+    print(f"\n   Auto-label val accuracy  : {auto_acc:.3f}")
+    print(f"   Human-label accuracy     : {human_acc:.3f}")
+    gap = auto_acc - human_acc
+    if gap > 0.05:
+        print(f"   ⚠️  Gap {gap:.3f} > 0.05 — model is overfitting to heuristic labels")
+    else:
+        print(f"   ✅ Gap {gap:.3f} ≤ 0.05 — model generalises beyond heuristics")
 
 # ── export TFLite ─────────────────────────────────────────────────────────────
 print("\n📦 Exporting TFLite...")
