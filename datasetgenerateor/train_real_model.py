@@ -504,10 +504,22 @@ else:
 
 print(f"\n   Label distribution (after seed-patch):\n{phone_df['label'].value_counts()}")
 
+# ── inject fraud_master.csv (3,899 guaranteed-fraud rows) ─────────────────────
+FRAUD_MASTER = os.path.join(os.path.dirname(__file__), 'fraud_master.csv')
+if os.path.exists(FRAUD_MASTER):
+    fm = pd.read_csv(FRAUD_MASTER, dtype=str).fillna('')
+    fm = fm.rename(columns={'address': 'sender'})
+    fm['label'] = 'fraud'           # all rows are confirmed fraud
+    print(f"\n💉 Injecting fraud_master.csv: {len(fm):,} rows")
+else:
+    fm = pd.DataFrame(columns=['sender','body','label'])
+    print("\n   ⚠️  fraud_master.csv not found — skipping synthetic injection")
+
 # ── combine ────────────────────────────────────────────────────────────────────
 combined = pd.concat([
     phone_df[['sender','body','label']],
     spam_df[['sender','body','label']],
+    fm[['sender','body','label']],
 ], ignore_index=True).drop_duplicates(subset='body')
 
 print(f"\n📊 Combined dataset: {len(combined):,} messages")
