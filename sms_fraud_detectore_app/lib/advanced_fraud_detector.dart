@@ -164,9 +164,9 @@ class AdvancedFraudDetector {
         (RegExp(r'(wa\.me|t\.me/|telegram|whatsapp|apply.?now)').hasMatch(t) || _isPhone(s)))
       return 'job_scam';
 
-    // Any URL counts as a phishing signal in the breakdown panel.
-    // (The bubble in thread_page.dart only shows tags for SPAM/FRAUD.)
-    if (_hasUrl(t)) return 'phishing_link';
+    // URL present but from a known-legit domain → not a phishing signal.
+    // URL from an unknown domain → tag as phishing_link.
+    if (_hasUrl(t) && !_hasTrustedUrl(t)) return 'phishing_link';
 
     // No specific pattern found — null for clean LEGIT, fallback label for flagged
     if (result == DetectionResult.legitimate) return null;
@@ -275,7 +275,38 @@ class AdvancedFraudDetector {
 
   int _capsWords(String t) =>
       t.split(' ').where((w) => w.length > 2 && w == w.toUpperCase()).length;
+  // ── trusted-domain allowlist ──────────────────────────────────────────────
+  // URLs from these domains are NOT tagged as phishing_link.
+  // The raw _hasUrl() flag is still used for feature extraction (model input)
+  // because the model was trained with it; only the reason-tag is suppressed.
+  static const _trustedDomains = [
+    // Telecom
+    'airtel.in', 'airtel.com', 'jio.com', 'myairtel.app',
+    'bsnl.in', 'vodafone.in', 'vi.in',
+    // Banking & payments
+    'hdfcbank.com', 'sbi.co.in', 'onlinesbi.sbi', 'icicibank.com',
+    'axisbank.com', 'kotak.com', 'yesbank.in', 'rbl.in',
+    'paytm.com', 'phonepe.com', 'gpay.app', 'upi.npci.org.in',
+    // Insurance
+    'icicilombard.com', 'hdfclife.com', 'licindia.in', 'starhealth.in',
+    'bajajfinserv.in', 'reliancegeneral.co.in',
+    // E-commerce & delivery
+    'amazon.in', 'flipkart.com', 'myntra.com', 'meesho.com',
+    'swiggy.in', 'zomato.com', 'blinkit.com',
+    'bluedart.com', 'delhivery.com', 'ekart.in', 'dtdc.com',
+    // Utilities & govt
+    'irctc.co.in', 'indianrail.gov.in', 'india.gov.in',
+    'incometax.gov.in', 'uidai.gov.in', 'epfindia.gov.in',
+    'bescom.org', 'mahadiscom.in', 'tneb.in',
+    // OTT & entertainment
+    'jiocinema.com', 'hotstar.com', 'netflix.com', 'primevideo.com',
+  ];
 
+  /// Returns true if [t] contains a URL whose host matches a trusted domain.
+  bool _hasTrustedUrl(String t) {
+    final lower = t.toLowerCase();
+    return _trustedDomains.any(lower.contains);
+  }
   bool _hasUrl(String t) =>
       RegExp(r'https?://|www\.|\.com|\.in|\.org').hasMatch(t);
 
