@@ -164,9 +164,18 @@ class AdvancedFraudDetector {
         (RegExp(r'(wa\.me|t\.me/|telegram|whatsapp|apply.?now)').hasMatch(t) || _isPhone(s)))
       return 'job_scam';
 
-    // URL present but from a known-legit domain → not a phishing signal.
-    // URL from an unknown domain → tag as phishing_link.
-    if (_hasUrl(t) && !_hasTrustedUrl(t)) return 'phishing_link';
+    // URL analysis:
+    //  • Known shorteners (bit.ly, lihi.cc, rb.gy …) are always suspicious —
+    //    no legitimate Indian service sends SMS with a shortener link.
+    //  • Other unknown URLs only trigger phishing_link when the model also
+    //    classifies as SPAM or FRAUD.  LEGIT-classified messages with unknown
+    //    URLs are silently passed (avoids 200+ false-positive tags from
+    //    service SMS that use sub-domains not in the trusted list).
+    if (_hasUrl(t)) {
+      if (_hasUrlShortener(t)) return 'phishing_link';
+      if (!_hasTrustedUrl(t) && result != DetectionResult.legitimate)
+        return 'phishing_link';
+    }
 
     // No specific pattern found — null for clean LEGIT, fallback label for flagged
     if (result == DetectionResult.legitimate) return null;
@@ -275,31 +284,77 @@ class AdvancedFraudDetector {
 
   int _capsWords(String t) =>
       t.split(' ').where((w) => w.length > 2 && w == w.toUpperCase()).length;
+  // ── URL shorteners — always treated as suspicious ────────────────────────
+  // Legitimate Indian service SMS never use generic shorteners.
+  static const _urlShorteners = [
+    'bit.ly', 'lihi.cc', 'rb.gy', 's.id', 'tinyurl.com',
+    'cutt.ly', 'shorturl.at', 'tiny.cc', 'is.gd', 'ow.ly',
+    'goo.gl', 'clck.ru', 'qr.ae', 'adf.ly', 'bc.vc',
+  ];
+
+  bool _hasUrlShortener(String t) {
+    final lower = t.toLowerCase();
+    return _urlShorteners.any(lower.contains);
+  }
+
   // ── trusted-domain allowlist ──────────────────────────────────────────────
   // URLs from these domains are NOT tagged as phishing_link.
   // The raw _hasUrl() flag is still used for feature extraction (model input)
   // because the model was trained with it; only the reason-tag is suppressed.
   static const _trustedDomains = [
     // Telecom
-    'airtel.in', 'airtel.com', 'jio.com', 'myairtel.app',
-    'bsnl.in', 'vodafone.in', 'vi.in',
+    'airtel.in', 'airtel.com', 'jio.com', 'myairtel.app', 'jio.in',
+    'bsnl.in', 'vodafone.in', 'vi.in', 'idea.in',
     // Banking & payments
-    'hdfcbank.com', 'sbi.co.in', 'onlinesbi.sbi', 'icicibank.com',
-    'axisbank.com', 'kotak.com', 'yesbank.in', 'rbl.in',
+    'hdfcbank.com', 'sbi.co.in', 'onlinesbi.sbi', 'onlinesbi.com',
+    'icicibank.com', 'axisbank.com', 'axisdirect.in',
+    'kotak.com', 'kotakbank.com', 'yesbank.in', 'rbl.in', 'rblbank.com',
+    'indusind.com', 'federalbank.co.in', 'idfcfirstbank.com',
+    'canarabank.com', 'pnbindia.in', 'bankofbaroda.in', 'unionbankofindia.com',
     'paytm.com', 'phonepe.com', 'gpay.app', 'upi.npci.org.in',
+    'bhimupi.org.in', 'npci.org.in', 'mobikwik.com', 'freecharge.in',
+    'razorpay.com', 'cashfree.com',
+    // NBFC & fintech
+    'bajajfinserv.in', 'bajajfinance.in', 'hdbfs.com', 'tatacapital.com',
+    'mahindrafinance.com', 'cholamandalam.com', 'muthootfinance.com',
     // Insurance
     'icicilombard.com', 'hdfclife.com', 'licindia.in', 'starhealth.in',
-    'bajajfinserv.in', 'reliancegeneral.co.in',
-    // E-commerce & delivery
-    'amazon.in', 'flipkart.com', 'myntra.com', 'meesho.com',
-    'swiggy.in', 'zomato.com', 'blinkit.com',
+    'reliancegeneral.co.in', 'niaonline.co.in', 'newindia.co.in',
+    'policybazaar.com', 'coverfox.com', 'digit.in', 'acko.com',
+    // E-commerce
+    'amazon.in', 'amazon.com', 'amzn.in', 'amzn.to',
+    'flipkart.com', 'fkrt.it', 'dl.flipkart.com',
+    'myntra.com', 'meesho.com', 'nykaa.com', 'nykaa.in',
+    'snapdeal.com', 'tatacliq.com', 'reliance.com', 'ajio.com',
+    'bigbasket.com', 'jiomart.com', 'zepto.com', 'blinkit.com',
+    'swiggy.in', 'swiggy.com', 'zomato.com', 'dunzo.com',
+    // Delivery & logistics
     'bluedart.com', 'delhivery.com', 'ekart.in', 'dtdc.com',
+    'ecomexpress.in', 'xpressbees.com', 'indiapost.gov.in',
+    'shadowfax.in', 'shiprocket.in', 'dotzot.in',
+    // Cab & mobility
+    'olacabs.com', 'ola.cabs', 'uber.com', 'rapido.bike',
+    // Travel
+    'irctc.co.in', 'indianrail.gov.in', 'makemytrip.com', 'goibibo.com',
+    'yatra.com', 'cleartrip.com', 'easemytrip.com',
     // Utilities & govt
-    'irctc.co.in', 'indianrail.gov.in', 'india.gov.in',
-    'incometax.gov.in', 'uidai.gov.in', 'epfindia.gov.in',
-    'bescom.org', 'mahadiscom.in', 'tneb.in',
+    'india.gov.in', 'incometax.gov.in', 'uidai.gov.in', 'epfindia.gov.in',
+    'mygov.in', 'digilocker.gov.in', 'passportindia.gov.in',
+    'bescom.org', 'mahadiscom.in', 'tneb.in', 'tssouthernpower.com',
+    'bsesdelhi.com', 'bsesrajdhani.com', 'tpddl.com',
+    'mahanagar gas', 'igl.co.in', 'gujaratgas.com',
+    // Job portals
+    'naukri.com', 'linkedin.com', 'indeed.com', 'shine.com', 'timesjobs.com',
     // OTT & entertainment
     'jiocinema.com', 'hotstar.com', 'netflix.com', 'primevideo.com',
+    'sonyliv.com', 'zee5.com', 'voot.com', 'mxplayer.in',
+    // Google services
+    'google.com', 'google.co.in', 'googleapis.com', 'play.google.com',
+    'accounts.google.com',
+    // Apple
+    'apple.com', 'icloud.com',
+    // Social (OTP / verification SMS)
+    'facebook.com', 'whatsapp.com', 'instagram.com',
   ];
 
   /// Returns true if [t] contains a URL whose host matches a trusted domain.
