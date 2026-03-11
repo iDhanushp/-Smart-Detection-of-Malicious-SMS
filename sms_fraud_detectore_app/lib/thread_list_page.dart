@@ -1,246 +1,277 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import 'sms_log_state.dart';
-import 'thread_models.dart';
 import 'sms_log_model.dart';
 import 'thread_page.dart';
 
 class ThreadListPage extends StatelessWidget {
-  const ThreadListPage({super.key});
+  const ThreadListPage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final threads = context.watch<SmsLogState>().threads;
-    final isSyncing = context.watch<SmsLogState>().isSyncing;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Messages'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
+        title: const Text('SMS Fraud Detector'),
         actions: [
-          if (isSyncing)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
+          Consumer<SmsLogState>(
+            builder: (_, state, __) => IconButton(
+              icon: state.isSyncing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh),
+              tooltip: 'Re-scan',
+              onPressed: state.isSyncing ? null : () => state.syncDeviceSms(),
             ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              // TODO: Implement search functionality
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Search coming soon!')),
-              );
-            },
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'settings':
-                  // TODO: Navigate to settings
-                  break;
-                case 'help':
-                  // TODO: Show help
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'settings',
-                child: Row(
-                  children: [
-                    Icon(Icons.settings),
-                    SizedBox(width: 8),
-                    Text('Settings'),
-                  ],
-                ),
+        ],
+      ),
+      body: Consumer<SmsLogState>(
+        builder: (context, state, _) {
+          // ── progress bar while syncing ─────────────────────────────────
+          if (state.isSyncing && state.threads.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(state.statusMsg),
+                  const SizedBox(height: 8),
+                  Text('${state.progress}%',
+                      style: Theme.of(context).textTheme.headlineMedium),
+                ],
               ),
-              const PopupMenuItem(
-                value: 'help',
-                child: Row(
-                  children: [
-                    Icon(Icons.help),
-                    SizedBox(width: 8),
-                    Text('Help'),
-                  ],
-                ),
+            );
+          }
+
+          // ── stats row ─────────────────────────────────────────────────
+          final threads = state.threads;
+          return Column(
+            children: [
+              if (state.isSyncing)
+                LinearProgressIndicator(value: state.progress / 100),
+              _StatsRow(state: state),
+              _ThreatBreakdown(state: state),
+              Expanded(
+                child: threads.isEmpty
+                    ? const Center(child: Text('No messages found'))
+                    : ListView.separated(
+                        itemCount: threads.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1, indent: 72),
+                        itemBuilder: (ctx, i) =>
+                            _ThreadTile(thread: threads[i]),
+                      ),
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
-      body: threads.isEmpty
-          ? _buildEmptyState()
-          : ListView.separated(
-              itemCount: threads.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final thread = threads[index];
-                final last = thread.lastMessage;
-                return _buildThreadTile(context, thread, last);
-              },
-            ),
     );
   }
+}
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+// ── Stats strip ───────────────────────────────────────────────────────────
+
+class _StatsRow extends StatelessWidget {
+  final SmsLogState state;
+  const _StatsRow({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceVariant,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No messages yet',
+          _Stat(label: 'Safe',   value: state.countLegitimate, color: Colors.green),
+          _Stat(label: 'Spam',   value: state.countSpam,       color: Colors.orange),
+          _Stat(label: 'Fraud',  value: state.countFraud,      color: Colors.red),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+  const _Stat({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text('$value',
             style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.bold, fontSize: 20, color: color)),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+}
+
+// ── Threat breakdown panel ────────────────────────────────────────────
+
+class _ThreatBreakdown extends StatelessWidget {
+  final SmsLogState state;
+  const _ThreatBreakdown({required this.state});
+
+  static const _icons = <String, String>{
+    'phishing_link':      '🔗',
+    'data_steal':         '💳',
+    'prize_fraud':        '🎰',
+    'account_threat':     '🔒',
+    'credential_harvest': '🔑',
+    'legal_threat':       '⚖️',
+    'kyc_fraud':          '📋',
+    'fraud_alert':        '🚨',
+    'impersonation':      '🎭',
+    'job_scam':           '💼',
+    'promotional':        '📢',
+    'suspicious':         '⚠️',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final counts = state.reasonCounts;
+    if (counts.isEmpty) return const SizedBox.shrink();
+
+    final total = counts.fold<int>(0, (s, e) => s + e.value);
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+        title: Row(
+          children: [
+            const Text('🛡️  Threat Breakdown',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text('$total flagged',
+                  style: const TextStyle(
+                      fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold)),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'SMS messages will appear here\nwith fraud detection results',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
+          ],
+        ),
+        initiallyExpanded: true,
+        childrenPadding:
+            const EdgeInsets.only(left: 12, right: 12, bottom: 10),
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: counts.map((entry) {
+              final icon  = _icons[entry.key] ?? '❓';
+              final label = entry.key.replaceAll('_', ' ');
+              return _ReasonChip(
+                icon: icon,
+                label: label,
+                count: entry.value,
+              );
+            }).toList(),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildThreadTile(
-      BuildContext context, ThreadEntry thread, SmsLogEntry last) {
-    final isFraudulent = last.result == DetectionResult.fraudulent;
-    final isSpam = last.result == DetectionResult.spam;
+class _ReasonChip extends StatelessWidget {
+  final String icon;
+  final String label;
+  final int count;
+  const _ReasonChip({
+    required this.icon,
+    required this.label,
+    required this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.grey[800]!
+            : Colors.grey.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withOpacity(0.3)),
+      ),
+      child: RichText(
+        text: TextSpan(
+          style: DefaultTextStyle.of(context)
+              .style
+              .copyWith(fontSize: 12),
+          children: [
+            TextSpan(text: '$icon  '),
+            TextSpan(
+                text: label,
+                style: const TextStyle(fontWeight: FontWeight.w500)),
+            TextSpan(
+                text: '  •  $count',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.redAccent)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Thread tile ───────────────────────────────────────────────────────────
+
+class _ThreadTile extends StatelessWidget {
+  final ThreadEntry thread;
+  const _ThreadTile({required this.thread});
+
+  @override
+  Widget build(BuildContext context) {
+    final worst  = thread.worstResult;
+    final last   = thread.lastMessage;
+    final ts     = _fmtTime(last.timestamp);
 
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: CircleAvatar(
-        radius: 24,
-        backgroundColor: isFraudulent
-            ? Colors.red.shade100
-            : isSpam
-                ? Colors.orange.shade100
-                : Colors.blue.shade100,
-        child: Icon(
-          isFraudulent
-              ? Icons.warning
-              : isSpam
-                  ? Icons.report
-                  : Icons.person,
-          color: isFraudulent
-              ? Colors.red
-              : isSpam
-                  ? Colors.orange
-                  : Colors.blue,
-          size: 24,
-        ),
+        backgroundColor: worst.color.withOpacity(0.15),
+        child: Icon(worst.icon, color: worst.color, size: 20),
       ),
       title: Row(
         children: [
           Expanded(
-            child: Text(
-              thread.address,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
+            child: Text(thread.address,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
           ),
-          if (isFraudulent || isSpam)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color:
-                    isFraudulent ? Colors.red.shade100 : Colors.orange.shade100,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                isFraudulent ? 'FRAUD' : 'SPAM',
-                style: TextStyle(
-                  color: isFraudulent
-                      ? Colors.red.shade700
-                      : Colors.orange.shade700,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+          const SizedBox(width: 8),
+          Text(ts,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.outline)),
         ],
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 4),
-          Text(
-            last.body,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(
-                isFraudulent
-                    ? Icons.warning
-                    : isSpam
-                        ? Icons.report
-                        : Icons.check_circle,
-                size: 14,
-                color: isFraudulent
-                    ? Colors.red
-                    : isSpam
-                        ? Colors.orange
-                        : Colors.green,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                isFraudulent
-                    ? 'Fraudulent'
-                    : isSpam
-                        ? 'Spam'
-                        : 'Legitimate',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isFraudulent
-                      ? Colors.red
-                      : isSpam
-                          ? Colors.orange
-                          : Colors.green,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                _friendlyTime(last.timestamp),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
-                ),
-              ),
-            ],
-          ),
+          Text(last.body,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 2),
+          _ResultBadge(result: worst),
         ],
       ),
       onTap: () => Navigator.push(
@@ -252,24 +283,37 @@ class ThreadListPage extends StatelessWidget {
     );
   }
 
-  String _friendlyTime(DateTime ts) {
+  String _fmtTime(DateTime dt) {
     final now = DateTime.now();
-    final difference = now.difference(ts);
-
-    if (difference.inDays > 0) {
-      if (difference.inDays == 1) {
-        return 'Yesterday';
-      } else if (difference.inDays < 7) {
-        return '${difference.inDays}d ago';
-      } else {
-        return '${ts.month}/${ts.day}/${ts.year}';
-      }
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
+    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     }
+    return '${dt.day}/${dt.month}';
+  }
+}
+
+// ── Shared badge ──────────────────────────────────────────────────────────
+
+class _ResultBadge extends StatelessWidget {
+  final DetectionResult result;
+  const _ResultBadge({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: result.color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: result.color.withOpacity(0.4)),
+      ),
+      child: Text(
+        result.label.toUpperCase(),
+        style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: result.color),
+      ),
+    );
   }
 }

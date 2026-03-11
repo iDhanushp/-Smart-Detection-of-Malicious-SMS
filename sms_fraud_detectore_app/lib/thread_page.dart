@@ -1,366 +1,216 @@
 import 'package:flutter/material.dart';
-
-import 'thread_models.dart';
 import 'sms_log_model.dart';
 
 class ThreadPage extends StatelessWidget {
   final ThreadEntry thread;
-  const ThreadPage({super.key, required this.thread});
+  const ThreadPage({Key? key, required this.thread}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final messages = thread.messages;
-    messages.sort((a, b) => a.timestamp.compareTo(b.timestamp)); // oldest first
+    final worst = thread.worstResult;
 
     return Scaffold(
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              thread.address,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            Text(
-              '${messages.length} message${messages.length != 1 ? 's' : ''}',
-              style:
-                  const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-            ),
+            Text(thread.address,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Text('${thread.messages.length} messages',
+                style: const TextStyle(fontSize: 12)),
           ],
         ),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {
-              _showThreadOptions(context);
-            },
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Chip(
+              label: Text(worst.label.toUpperCase(),
+                  style: TextStyle(
+                      color: worst.color,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12)),
+              backgroundColor: worst.color.withOpacity(0.12),
+              side: BorderSide(color: worst.color.withOpacity(0.4)),
+            ),
           ),
         ],
       ),
       body: Column(
         children: [
-          Expanded(
-            child: messages.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: messages.length,
-                    itemBuilder: (context, idx) {
-                      final msg = messages[idx];
-                      return _buildMessageBubble(
-                          context, msg, idx == messages.length - 1);
-                    },
-                  ),
-          ),
-          _buildInputBar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No messages in this thread',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageBubble(
-      BuildContext context, SmsLogEntry msg, bool isLast) {
-    final isFraud = msg.result == DetectionResult.fraudulent;
-    final isIncoming = true; // All messages are incoming for now
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment:
-            isIncoming ? MainAxisAlignment.start : MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (isIncoming) ...[
-            CircleAvatar(
-              radius: 16,
-              backgroundColor:
-                  isFraud ? Colors.red.shade100 : Colors.blue.shade100,
-              child: Icon(
-                isFraud ? Icons.warning : Icons.person,
-                color: isFraud ? Colors.red : Colors.blue,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75,
-              ),
-              decoration: BoxDecoration(
-                color: isFraud
-                    ? Colors.red.shade50
-                    : (isIncoming
-                        ? Colors.grey.shade100
-                        : Colors.blue.shade100),
-                borderRadius: BorderRadius.circular(16),
-                border: isFraud
-                    ? Border.all(color: Colors.red.shade200, width: 1)
-                    : null,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          // ── alert banner for fraud / spam ───────────────────────────────
+          if (worst != DetectionResult.legitimate)
+            Container(
+              width: double.infinity,
+              color: worst.color.withOpacity(0.12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
                 children: [
-                  if (isFraud)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade100,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.warning,
-                            size: 14,
-                            color: Colors.red.shade700,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'FRAUDULENT MESSAGE',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.red.shade700,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: 12,
-                      right: 12,
-                      top: isFraud ? 8 : 12,
-                      bottom: 12,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          msg.body,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isFraud ? Icons.warning : Icons.check_circle,
-                              size: 12,
-                              color: isFraud ? Colors.red : Colors.green,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              isFraud ? 'Fraudulent' : 'Legitimate',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: isFraud ? Colors.red : Colors.green,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _formatTime(msg.timestamp),
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                  Icon(worst.icon, color: worst.color, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      worst == DetectionResult.fraudulent
+                          ? '⚠️ This thread contains FRAUDULENT messages. Do not share personal or financial information.'
+                          : '📢 This thread contains SPAM messages.',
+                      style: TextStyle(
+                          color: worst.color, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-          if (!isIncoming) ...[
-            const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.blue.shade100,
-              child: const Icon(
-                Icons.person,
-                color: Colors.blue,
-                size: 16,
-              ),
+
+          // ── message list ────────────────────────────────────────────────
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: thread.messages.length,
+              itemBuilder: (_, i) => _MessageBubble(msg: thread.messages[i]),
             ),
-          ],
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildInputBar() {
+// ── Single message bubble ─────────────────────────────────────────────────
+
+class _MessageBubble extends StatelessWidget {
+  final SmsLogEntry msg;
+  const _MessageBubble({required this.msg});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    Color bgColor;
+    switch (msg.result) {
+      case DetectionResult.fraudulent:
+        bgColor = Colors.red.withOpacity(isDark ? 0.25 : 0.10);
+        break;
+      case DetectionResult.spam:
+        bgColor = Colors.orange.withOpacity(isDark ? 0.25 : 0.10);
+        break;
+      case DetectionResult.legitimate:
+        bgColor = isDark ? Colors.grey[800]! : Colors.grey[100]!;
+        break;
+    }
+
+    final ts = _fmtFull(msg.timestamp);
+
     return Container(
+      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade300),
-        ),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: msg.result != DetectionResult.legitimate
+            ? Border.all(color: msg.result.color.withOpacity(0.35))
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // badge + reason tag + timestamp
+          Row(
+            children: [
+              _Badge(result: msg.result),
+              if (msg.reason != null &&
+                  msg.result != DetectionResult.legitimate) ...[  
+                const SizedBox(width: 6),
+                _ReasonTag(reason: msg.reason!),
+              ],
+              const Spacer(),
+              Text(ts,
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.outline)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // body
+          Text(msg.body, style: const TextStyle(fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
+  String _fmtFull(DateTime dt) {
+    return '${dt.day}/${dt.month}/${dt.year}  '
+        '${dt.hour.toString().padLeft(2, '0')}:'
+        '${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final DetectionResult result;
+  const _Badge({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: result.color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: result.color.withOpacity(0.4)),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Type a message...',
-                  border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-                maxLines: null,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            decoration: const BoxDecoration(
-              color: Colors.blue,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.send, color: Colors.white),
-              onPressed: () {
-                // TODO: Implement send functionality
-              },
-            ),
+          Icon(result.icon, size: 12, color: result.color),
+          const SizedBox(width: 4),
+          Text(
+            result.label.toUpperCase(),
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: result.color),
           ),
         ],
       ),
     );
   }
+}
 
-  String _formatTime(DateTime timestamp) {
-    return '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
-  }
+class _ReasonTag extends StatelessWidget {
+  final String reason;
+  const _ReasonTag({required this.reason});
 
-  void _showThreadOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.info),
-              title: const Text('Thread Info'),
-              onTap: () {
-                Navigator.pop(context);
-                _showThreadInfo(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete),
-              title: const Text('Delete Thread'),
-              onTap: () {
-                Navigator.pop(context);
-                _showDeleteConfirmation(context);
-              },
-            ),
-          ],
-        ),
+  // Map rule keys to human-readable icon + label
+  static const _icons = <String, String>{
+    'phishing_link':      '🔗',
+    'data_steal':         '💳',
+    'prize_fraud':        '🎰',
+    'account_threat':     '🔒',
+    'credential_harvest': '🔑',
+    'legal_threat':       '⚖️',
+    'kyc_fraud':          '📋',
+    'fraud_alert':        '🚨',
+    'impersonation':      '🎭',
+    'job_scam':           '💼',
+    'promotional':        '📢',
+    'suspicious':         '⚠️',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final icon  = _icons[reason] ?? '❓';
+    final label = reason.replaceAll('_', ' ');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.grey.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.grey.withOpacity(0.35)),
       ),
-    );
-  }
-
-  void _showThreadInfo(BuildContext context) {
-    final messages = thread.messages;
-    final fraudulentCount =
-        messages.where((m) => m.result == DetectionResult.fraudulent).length;
-    final legitimateCount = messages.length - fraudulentCount;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Thread Information'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Contact: ${thread.address}'),
-            const SizedBox(height: 8),
-            Text('Total Messages: ${messages.length}'),
-            const SizedBox(height: 8),
-            Text('Legitimate: $legitimateCount'),
-            const SizedBox(height: 8),
-            Text('Fraudulent: $fraudulentCount'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Thread'),
-        content: const Text(
-            'Are you sure you want to delete this thread? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-              // TODO: Implement delete functionality
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+      child: Text(
+        '$icon $label',
+        style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey),
       ),
     );
   }

@@ -32,32 +32,8 @@ class SmsLogItem extends StatelessWidget {
             SizedBox(height: 4),
             Row(
               children: [
-                // Treat both spam (1) and fraudulent (2) as spam for badge purposes.
-                if (entry.result == DetectionResult.spam ||
-                    entry.result == DetectionResult.fraudulent)
-                  Container(
-                    margin: const EdgeInsets.only(right: 6),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.report, color: Colors.orange, size: 14),
-                        const SizedBox(width: 4),
-                        Text('Spam',
-                            style: TextStyle(
-                                color: Colors.orange,
-                                fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                // Fraud badge when classified as fraudulent OR spam from phone number.
-                if ((entry.result == DetectionResult.fraudulent) ||
-                    (entry.result == DetectionResult.spam &&
-                        entry.sender.startsWith('+')))
+                // Show FRAUD badge for fraudulent messages
+                if (entry.result == DetectionResult.fraudulent)
                   Container(
                     margin: const EdgeInsets.only(right: 6),
                     padding:
@@ -70,21 +46,64 @@ class SmsLogItem extends StatelessWidget {
                       children: [
                         Icon(Icons.warning, color: Colors.red, size: 14),
                         const SizedBox(width: 4),
-                        Text('Fraud',
+                        Text('FRAUD',
                             style: TextStyle(
                                 color: Colors.red,
                                 fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
-                Text(
-                  entry.resultText,
-                  style: TextStyle(
-                    color: entry.displayColor,
-                    fontWeight: FontWeight.bold,
+                // Show SPAM badge for spam messages
+                if (entry.result == DetectionResult.spam)
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.report, color: Colors.orange, size: 14),
+                        const SizedBox(width: 4),
+                        Text('SPAM',
+                            style: TextStyle(
+                                color: Colors.orange,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                // Show SAFE badge for legitimate messages
+                if (entry.result == DetectionResult.legitimate)
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 14),
+                        const SizedBox(width: 4),
+                        Text('SAFE',
+                            style: TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: Text(
+                    entry.resultText,
+                    style: TextStyle(
+                      color: entry.displayColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                SizedBox(width: 16),
                 if (!entry.isMistake && onMistake != null)
                   TextButton(
                     onPressed: onMistake,

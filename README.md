@@ -1,531 +1,219 @@
 # Smart Detection of Malicious SMS 🛡️
 
-An **advanced AI-powered mobile fraud detection system** that uses **behavioral pattern analysis** with **intelligent sender verification** to protect users from SMS-based threats in real-time. Goes far beyond simple keyword matching to understand psychological manipulation, sentiment, and message intent.
+An **AI-powered mobile fraud detection system** that classifies incoming SMS as **LEGIT**, **SPAM**, or **FRAUD** — entirely on-device, with no cloud dependency.
 
-## 🎯 **Revolutionary Innovation**
+Trained on **22,615 real Indian SMS messages** using a **30-feature behavioral neural network** plus a **priority-ordered rule engine** that labels *why* each message was flagged.
 
-**Enhanced Detection = Behavioral Analysis + Semantic Understanding + Sender Intelligence**
+---
 
-Unlike traditional systems that rely on simple keyword matching, our approach analyzes **psychological patterns + message intent + sender legitimacy** for unprecedented accuracy:
+## How It Works
 
 ```
-Traditional Approach:                Enhanced Behavioral Analysis:
-├── Keyword matching only            ├── 🧠 Psychological manipulation detection
-├── High false positives             ├── 😨 Fear and urgency pattern analysis  
-├── Misses obfuscated text          ├── 👔 Authority impersonation recognition
-└── No context understanding        ├── 🎯 Intent and sentiment analysis
-                                     ├── 📊 Structural composition analysis
-                                     └── 🔍 Multi-factor intelligent classification
+SMS received
+  ├── Extract 30 behavioral features (urgency, fear, authority, data-request, URL, sender type)
+  ├── StandardScaler normalization  (fitted on 22,615 real messages)
+  ├── TFLite Dense network  -->  [P_LEGIT, P_SPAM, P_FRAUD]
+  └── Rule engine  -->  reason tag  (phishing_link / data_steal / job_scam / …)
 ```
 
-### **Classification Logic:**
+Both steps run **independently** — if TFLite fails to load, the rule engine still classifies every message and populates the Threat Breakdown panel.
+
+---
+
+## 3 Output Classes
+
+| Class | Badge | Examples |
+|-------|-------|----------|
+| LEGIT | Green  | OTPs, bank alerts, delivery notifications, personal messages |
+| SPAM  | Amber  | Promotional offers, prize claims, gambling apps, marketing  |
+| FRAUD | Red    | Account threats, phishing, impersonation, job scams         |
+
+---
+
+## 12 Reason Tags
+
+Every flagged message (SPAM or FRAUD) gets an emoji tag explaining the specific threat pattern:
+
+| Tag | Triggered By |
+|-----|--------------|
+| `account_threat`     | "account suspended / blocked / deactivated" |
+| `kyc_fraud`          | KYC / Aadhaar / PAN update requests |
+| `legal_threat`       | Court / police / arrest / FIR mentions |
+| `fraud_alert`        | Unauthorized transaction / suspicious activity |
+| `impersonation`      | Income Tax / IRDAI / SEBI / TRAI impersonation |
+| `credential_harvest` | Verify / confirm your OTP / PIN / CVV |
+| `data_steal`         | Share your card / OTP / password (excludes bank "do not share" warnings) |
+| `prize_fraud`        | Won / lucky draw / prize |
+| `job_scam`           | Work-from-home + wa.me / daily earnings scam |
+| `phishing_link`      | Any URL in message body |
+| `suspicious`         | FRAUD class but no specific rule matched |
+| `promotional`        | SPAM class but no specific rule matched |
+
+> Reason rules run on **all 500 scanned messages** (including LEGIT) so the Threat Breakdown panel
+> shows full pattern counts. The tag badge in the message bubble is only shown on SPAM / FRAUD messages.
+
+---
+
+## Model Performance
+
+**Model v3.0** — trained March 2026 on 22,615 real Indian SMS
+
 ```
-Behavioral Analysis Output:           App Display Classification:
-├── Fraud Patterns Detected          ├── 🔴 FRAUD: High threat + manipulation patterns
-│   ├── Account threats + urgency    │   ├── Account suspension scams
-│   ├── Authority impersonation      │   ├── Government/bank impersonation  
-│   └── Data harvesting attempts     │   └── Phishing with credential theft
-├── Spam Patterns Detected           ├── 🟡 SPAM: Promotional manipulation
-│   ├── Prize/reward manipulation    │   ├── Lottery/prize scams
-│   ├── Money offers + urgency       │   ├── Investment/income schemes
-│   └── Promotional pressure         │   └── Marketing with false urgency
-└── Legitimate Patterns              └── 🟢 LEGITIMATE: Verified safe communication
-    ├── Bank transaction alerts      │   ├── OTPs and verification codes
-    ├── Service notifications        │   ├── Delivery and appointment updates
-    └── Personal communications      │   └── Personal messages and conversations
-```
+Validation set: 4,523 messages
 
-## � **Advanced Features**
+              precision    recall  f1-score   support
 
-### **🧠 Behavioral Pattern Recognition**
-- **Psychological Manipulation Detection**: Identifies fear tactics, false urgency, reward manipulation
-- **Authority Impersonation Analysis**: Detects attempts to mimic banks, government, tech companies
-- **Data Harvesting Recognition**: Flags requests for OTPs, PINs, passwords, personal info
-- **Sentiment Analysis**: Understands emotional manipulation and threatening language
-- **Intent Classification**: Determines message purpose beyond surface keywords
+       LEGIT       0.99      0.94      0.96      4284
+        SPAM       0.43      0.77      0.55       216
+       FRAUD       0.30      0.96      0.46        23
 
-### **📊 Multi-Factor Analysis Engine**
-```python
-# Advanced behavioral scoring
-behavioral_signals = {
-    'urgency_patterns': 0.15,        # Time pressure tactics
-    'fear_tactics': 0.24,            # Threats and intimidation  
-    'authority_mimicry': 0.18,       # Impersonation attempts
-    'reward_manipulation': 0.31,     # Prize/money offers
-    'data_harvesting': 0.12,         # Information requests
-    'structural_anomalies': 0.08     # Writing style analysis
-}
-
-# Intelligent classification
-if fraud_score > 0.3: return "FRAUD"    # High-risk threats
-elif spam_score > 0.25: return "SPAM"   # Promotional manipulation  
-else: return "LEGITIMATE"                # Verified safe communication
-```
-
-### **⚡ Real-Time Protection**
-- **<45ms Analysis**: Lightning-fast behavioral pattern recognition
-- **99.89% Accuracy**: Trained on 10,946+ real SMS messages with behavioral analysis
-- **93.8% Test Accuracy**: Proven on comprehensive fraud/spam/legitimate test cases
-- **Privacy-First**: All behavioral analysis happens on-device
-- **Cross-Platform**: Native Android and iOS support with Flutter
-
-### **🎯 Smart Classification Examples**
-```
-🔴 FRAUD DETECTED:
-"URGENT: Your SBI account SUSPENDED! Verify NOW: fake-sbi.com"
-├── Fear Score: 0.16 (account threats)
-├── Urgency Score: 0.05 (time pressure) 
-├── Authority Score: 0.19 (bank impersonation)
-└── Classification: FRAUD (Confidence: 3.20)
-
-� SPAM DETECTED:
-"Congratulations! You WON ₹50,000! Claim immediately!"
-├── Reward Score: 0.31 (prize manipulation)
-├── Urgency Score: 0.19 (false pressure)
-├── Money Promises: Detected
-└── Classification: SPAM (Confidence: 1.70)
-
-🟢 LEGITIMATE VERIFIED:
-"Your OTP for SBI login: 123456. Do not share -SBIINB"
-├── Bank Code: AD-SBIINB (verified pattern)
-├── OTP Format: Legitimate structure
-├── Security Warning: Standard practice
-└── Classification: LEGITIMATE (Confidence: 0.69)
+    accuracy                           0.93      4523
 ```
 
-## 🚀 **Features**
+| Metric | Value |
+|--------|-------|
+| Overall accuracy  | 93.2% |
+| FRAUD recall      | 96% (catches 96 / 100 real fraud messages) |
+| SPAM recall       | 77% |
+| Inference time    | < 50 ms on-device |
+| Model size        | 58.8 KB (float32 TFLite, FC op v9) |
 
-### **Real-Time Protection**
-- ⚡ **Instant Detection**: <45ms analysis as SMS arrives
-- 🎯 **99.89% Accuracy**: Trained on 9,454 real SMS messages
-- 🔒 **Privacy-First**: All processing happens on-device
-- 📱 **Cross-Platform**: Native Android and iOS support
+---
 
-### **Smart Classification**
-- 🟢 **Legitimate**: OTPs, service notifications, personal messages
-- 🟡 **Spam**: Marketing, promotions, unsolicited offers
-- 🔴 **Fraud**: Spam from international phone numbers (+countryCode)
+## Architecture
 
-### **Advanced Detection Logic**
-```dart
-// Core fraud detection algorithm
-if (model.predict(message) == SPAM && sender.matches('+countryCode')) {
-  classification = FRAUD;  // 🔴 Red alert
-} else if (model.predict(message) == SPAM) {
-  classification = SPAM;   // 🟡 Yellow warning
-} else {
-  classification = LEGIT;  // 🟢 Green safe
-}
+### Project Structure
+
+```
+smart-sms-detection/
+├── sms_fraud_detectore_app/              # Flutter Android app
+│   ├── lib/
+│   │   ├── main.dart
+│   │   ├── sms_log_state.dart            # State: sync, classify, reasonCounts
+│   │   ├── sms_log_model.dart            # SmsLogEntry, ClassificationOutput
+│   │   ├── advanced_fraud_detector.dart  # TFLite + 12-rule reason engine
+│   │   ├── thread_list_page.dart         # Thread list + Threat Breakdown panel
+│   │   └── thread_page.dart              # Message bubbles + reason tags
+│   └── assets/
+│       ├── advanced_fraud_detector.tflite     # 58.8 KB float32 model (v3.0)
+│       └── behavioral_model_config.json       # scaler_mean / scaler_scale (30 values)
+├── datasetgenerateor/
+│   └── train_real_model.py              # Full retraining pipeline (22,615 messages)
+└── sms_extractor/                        # SMS export Flutter utility
 ```
 
-## 📊 **Performance Metrics**
+### TFLite Model
 
-### **Enhanced Behavioral Analysis Results**
-```
-Comprehensive Testing (16 diverse message types):
-══════════════════════════════════════════════════════════════
-Overall Accuracy: 93.8% (15/16 correct classifications)
-Fraud Detection: 100% (4/4 fraud messages correctly identified)
-Spam Detection: 100% (4/4 spam messages correctly identified)  
-Legitimate Recognition: 87.5% (7/8 legitimate messages verified)
-False Positive Rate: 6.25% (1/16 - service notification edge case)
-Average Processing Time: <45ms per message
-Behavioral Pattern Recognition: Advanced multi-factor analysis
-```
+| Property | Value |
+|----------|-------|
+| Input    | [1, 30] float32 |
+| Output   | [1, 3] float32 → [P_LEGIT, P_SPAM, P_FRAUD] |
+| Architecture | Dense(128,relu) → Dropout(0.3) → Dense(64,relu) → Dropout(0.2) → Dense(32,relu) → Dense(3,softmax) |
+| Size | 58.8 KB (float32, no quantization) |
+| FC op version | v9 (compatible with tflite_flutter 0.11.0 / TFLite 2.14) |
+| BatchNormalization | REMOVED — BN causes TF 2.17 MLIR to emit FC op v12 which tflite_flutter 0.11.0 cannot run |
 
-### **Real-World SMS Data Analysis**
-```
-Your SMS Dataset Processing (100 sample messages):
-══════════════════════════════════════════════════════════════
-Total Messages Analyzed: 100 from your actual SMS data
-Fraud Detected: 21 messages (account threats, scams)
-Legitimate Verified: 79 messages (banks, services, personal)
-Bank Transaction Protection: 100% (fixed false positives)
-Processing Speed: <50ms average per message
-Confidence Scoring: Fraud 0.60, Legitimate 0.39 average
-```
+### 30 Behavioral Features
 
-### **Behavioral Pattern Detection Capabilities**
 ```
-Advanced Pattern Recognition:
-══════════════════════════════════════════════════════════════
-✅ Account Suspension Scams: "Account SUSPENDED! Verify NOW!"
-✅ Government Impersonation: "Income Tax Department: PAN disabled"
-✅ Prize/Lottery Fraud: "Congratulations! You WON ₹50,000!"
-✅ Investment Scams: "Earn ₹5000 daily from home!"
-✅ Phishing Attempts: "Click to verify: fake-bank.com"
-✅ Data Harvesting: "Provide OTP to confirm identity"
-✅ Authority Mimicking: "Police/Court legal action notice"
-✅ Obfuscated Text: "cl!ck", "0ffer", "urg3nt", "fr33"
+ 0  urgency_immediate          16  word_count_normalized
+ 1  urgency_time_pressure      17  uppercase_ratio
+ 2  fear_account_threats       18  digit_ratio
+ 3  fear_loss_threats          19  special_char_ratio
+ 4  reward_money               20  exclamation_count_normalized
+ 5  reward_prizes              21  caps_words_normalized
+ 6  authority_financial        22  has_url
+ 7  authority_government       23  has_phone
+ 8  action_data_harvesting     24  sender_is_phone
+ 9  action_immediate           25  sender_is_service
+10  total_urgency              26  sender_length_normalized
+11  total_fear                 27  fraud_score
+12  total_reward               28  spam_score
+13  total_authority            29  legit_score
+14  total_action
+15  length_normalized
 ```
 
-### **Cross-Device Performance**
-| Device Type | Analysis Time | Memory Usage | Battery Impact | Accuracy |
-|-------------|---------------|--------------|----------------|----------|
-| High-End    | 35-42ms       | 8.2-9.5MB    | 0.7-0.9%/100msg | 94.2% |
-| Mid-Range   | 45-52ms       | 9.1-11.3MB   | 1.0-1.3%/100msg | 93.8% |
-| Budget      | 58-68ms       | 10.5-13.2MB  | 1.5-2.0%/100msg | 93.1% |
+---
 
-## 🏗️ **Enhanced System Architecture**
+## App UI
 
-### **Three-App Ecosystem**
+### Thread List Screen
+- **Stats Row**: Safe / Spam / Fraud counts update live during sync
+- **Threat Breakdown Panel**: Collapsible; shows reason tag counts across all 500 scanned messages
+  (e.g. `phishing link: 312`, `data steal: 47`)
+- **Thread tiles**: Color-coded by worst classification in thread; last-message preview
+
+### Message Thread Screen
+- Message bubbles with inline reason badge for SPAM / FRAUD only
+  (e.g. `credential harvest`)
+
+### Classification Examples
+
 ```
-├── sms_extractor/                           # Privacy-first data collection
-│   ├── Purpose: Export SMS for training with privacy protection
-│   ├── Features: PII filtering, data minimization, user control
-│   └── Technology: Flutter with content provider access
-├── sms_fraud_detectore_app/                # Main AI-powered detection app  
-│   ├── Purpose: Real-time behavioral fraud detection
-│   ├── Features: Advanced ML inference + behavioral analysis
-│   └── Technology: Flutter + TensorFlow Lite + behavioral patterns
-├── ML_Model/                               # Enhanced training pipeline
-│   ├── Purpose: Behavioral pattern training and model optimization
-│   ├── advanced_features/semantic_detector.py    # SBERT + behavioral features
-│   └── train_enhanced.py                         # Multi-algorithm training
-└── datasetgenerateor/                      # Intelligent labeling system
-    ├── enhanced_behavioral_labeler.py      # Advanced pattern recognition
-    ├── comprehensive_analysis_demo.py      # Testing and validation
-    └── quick_start_enhanced.py            # Easy deployment script
+FRAUD   credential harvest
+"Dear Customer, your SBI account will be blocked. Verify OTP: bit.ly/xyz"
+
+SPAM    promotional
+"Play Rummy & Win Rs.10 Lakhs! Download now: gmg.im/rummy"
+
+LEGIT
+"Your OTP is 847291. Do NOT share this with anyone. -SBIINB"
 ```
 
-### **Enhanced Data Flow**
-```mermaid
-graph TD
-    A[SMS Received] --> B[Behavioral Pattern Analysis]
-    B --> C[Psychological Manipulation Detection]
-    C --> D[Authority Impersonation Check]
-    D --> E[Sender Verification]
-    E --> F[Multi-Factor Classification]
-    F --> G{Risk Assessment}
-    G -->|High Risk| H[🔴 FRAUD Alert]
-    G -->|Medium Risk| I[🟡 SPAM Warning]
-    G -->|Low Risk| J[🟢 LEGITIMATE Safe]
-    
-    B --> K[Urgency Patterns]
-    B --> L[Fear Tactics]  
-    B --> M[Reward Manipulation]
-    B --> N[Data Harvesting]
-```
+---
 
-### **Behavioral Analysis Engine**
-```python
-# Advanced pattern recognition system
-class BehavioralAnalysisEngine:
-    def analyze_message(self, text, sender):
-        # Multi-factor pattern analysis
-        patterns = {
-            'urgency_manipulation': detect_time_pressure(text),
-            'fear_intimidation': detect_threats(text), 
-            'authority_impersonation': detect_mimicry(text),
-            'reward_manipulation': detect_false_promises(text),
-            'data_harvesting': detect_info_requests(text),
-            'sender_legitimacy': verify_sender_patterns(sender)
-        }
-        
-        # Intelligent classification with confidence scoring
-        return intelligent_classification(patterns)
-```
+## Setup & Build
 
-## 🤖 **Advanced Machine Learning Pipeline**
+### Prerequisites
+- Flutter 3.x (`flutter doctor`)
+- Android device / emulator — API 23+ (minSdk 23)
+- Python 3.10+ with TF 2.17 (only needed for retraining)
 
-### **Enhanced Model Architecture**
-```python
-# Multi-layered behavioral analysis system
-Enhanced ML Pipeline:
-├── 1. Behavioral Pattern Extraction
-│   ├── Psychological manipulation detection
-│   ├── Emotional sentiment analysis  
-│   ├── Authority impersonation recognition
-│   └── Structural composition analysis
-├── 2. Semantic Understanding (Optional)
-│   ├── SBERT sentence embeddings (384 dimensions)
-│   ├── Context and intent analysis
-│   └── Advanced NLP with transformers
-├── 3. Traditional Features (Baseline)
-│   ├── TF-IDF vectorization (3000 features)
-│   └── N-gram pattern analysis
-└── 4. Ensemble Classification
-    ├── Random Forest (behavioral focus)
-    ├── XGBoost (pattern optimization)
-    └── Voting classifier (final decision)
-```
+### Build & Install
 
-### **Training Process**
 ```bash
-# 1. Enhanced Data Collection (Privacy-Preserved)
-python sms_extractor/export_sms.py --privacy-filters --limit-per-sender 5
-
-# 2. Advanced Behavioral Labeling  
-python datasetgenerateor/enhanced_behavioral_labeler.py \
-    --input sms_data.csv --output labeled_behavioral.csv
-
-# 3. Multi-Algorithm Model Training
-python ML_Model/train_enhanced.py \
-    --data labeled_behavioral.csv \
-    --use-semantic --use-behavioral \
-    --ensemble-models rf,xgb,lgb
-
-# 4. Mobile-Optimized Export
-python ML_Model/export_mobile_optimized.py \
-    --model enhanced_model.pkl \
-    --output fraud_detector_v2.tflite
-```
-
-### **Model Performance Comparison**
-```
-Enhanced vs. Original System Performance:
-══════════════════════════════════════════════════════════════
-Metric                    | Original  | Enhanced  | Improvement
-────────────────────────────────────────────────────────────
-Detection Accuracy        | 89.1%     | 93.8%     | +4.7%
-Fraud Pattern Recognition | Limited   | Advanced  | +Pattern Analysis
-False Positive Rate       | 8.2%      | 6.25%     | -23.8% reduction
-Context Understanding     | None      | Full      | +Semantic Analysis
-Behavioral Analysis       | Keywords  | Advanced  | +Multi-factor
-Processing Time           | 42ms      | 45ms      | +3ms (minimal)
-Obfuscation Resistance    | Low       | High      | +Robust Detection
-```
-python datasetgenerateor/train_classifier.py
-python datasetgenerateor/label_remaining.py
-
-# 3. 2-Class Model Training
-python ML_Model/train_2class_from_labeled.py
-
-# 4. TensorFlow Lite Export
-python ML_Model/export_tflite_2class.py
-```
-
-### **Training Results**
-```
-XGBoost Classifier Performance:
-══════════════════════════════════════════════════════════════
-Training Data: 9,454 messages (90.8% high-confidence)
-Test Accuracy: 99.89%
-Model Size: 197KB (TensorFlow Lite)
-Vocabulary: 3,000 features (TF-IDF + bigrams)
-
-Classification Report:
-                 precision    recall  f1-score   support
-    Legitimate       1.00      0.99      1.00       255
-    Spam             1.00      1.00      1.00      1636
-    
-    accuracy                           1.00      1891
-```
-
-## 📱 **Flutter App Screenshots**
-
-### **Main Interface**
-- **SMS Log View**: Real-time message classification
-- **Color-Coded Cards**: Visual threat indicators
-- **Detailed Analysis**: Probability scores and reasoning
-- **Filter Options**: View by classification type
-
-### **Classification Examples**
-```
-🟢 LEGITIMATE
-Sender: AX-HDFC
-Message: "Your OTP is 123456. Valid for 10 minutes."
-Confidence: 98.7%
-
-🟡 SPAM  
-Sender: OFFERS
-Message: "Limited time! 50% off all items. Shop now!"
-Confidence: 94.2%
-
-🔴 FRAUD
-Sender: +917894561230
-Message: "URGENT: Your account suspended. Verify now!"
-Confidence: 99.1%
-```
-
-## 🔧 **Installation**
-
-### **Prerequisites**
-- **Android**: 7.0+ (API level 24+)
-- **iOS**: 12.0+
-- **Storage**: 500MB free space
-- **Permissions**: SMS read access
-
-### **Quick Start**
-```bash
-# 1. Clone repository
-git clone https://github.com/your-repo/smart-sms-detection.git
-cd smart-sms-detection
-
-# 2. Setup Flutter environment
-flutter doctor
+cd sms_fraud_detectore_app
 flutter pub get
-
-# 3. Build and install
-flutter build apk --release
+flutter build apk --debug
 flutter install
 ```
 
-### **Custom Model Training**
+### Retrain the Model
+
 ```bash
-# 1. Collect your SMS data
-cd sms_extractor
-flutter run  # Export SMS to CSV
-
-# 2. Label the data
-cd ../datasetgenerateor
-python auto_labeler.py your_sms_export.csv
-
-# 3. Train custom model
-cd ../ML_Model
-python train_2class_from_labeled.py
-
-# 4. Export for mobile
-python export_tflite_2class.py
-
-# 5. Update Flutter app
-cp fraud_detector.tflite ../sms_fraud_detectore_app/assets/
-cp tfidf_vocab.json ../sms_fraud_detectore_app/assets/
+cd datasetgenerateor
+# Windows: activate D:\venvs\sms_fraud_detector_env\Scripts\activate
+python train_real_model.py
+# Exports directly to ../sms_fraud_detectore_app/assets/
 ```
-
-## 🔒 **Privacy & Security**
-
-### **Privacy-First Design**
-- ✅ **On-Device Processing**: All ML inference happens locally
-- ✅ **Zero Data Transmission**: SMS content never leaves your device
-- ✅ **No Cloud Dependencies**: Works completely offline
-- ✅ **Minimal Permissions**: Only SMS read access required
-- ✅ **Open Source**: Full transparency and auditability
-
-### **Security Features**
-- 🔐 **Encrypted Storage**: Local SQLite database with encryption
-- 🛡️ **Secure Architecture**: No external API calls or data sharing
-- 🔍 **Audit Trail**: Complete classification history
-- ⚡ **Real-Time Protection**: Instant threat detection
-
-## 📈 **Technical Specifications**
-
-### **Machine Learning**
-- **Algorithm**: XGBoost Classifier
-- **Features**: 3,000-dimensional TF-IDF vectors with bigrams
-- **Training Data**: 9,454 high-confidence labeled SMS messages
-- **Accuracy**: 99.89% on real-world test set
-- **Inference Time**: <45ms average
-
-### **Mobile Optimization**
-- **Model Format**: TensorFlow Lite (197KB)
-- **Vocabulary Size**: 135KB JSON file
-- **Memory Usage**: <15MB peak
-- **Battery Impact**: <1% per 100 messages
-- **Platform Support**: Android 7.0+, iOS 12.0+
-
-## 🧪 **Testing**
-
-### **Automated Testing**
-```bash
-# Unit tests
-flutter test
-
-# Integration tests  
-flutter test integration_test/
-
-# Performance tests
-flutter test test/performance/
-```
-
-### **Manual Testing Scenarios**
-1. **Legitimate Messages**: OTPs, service notifications, personal texts
-2. **Spam Messages**: Marketing offers, promotional content
-3. **Fraud Attempts**: Account suspension scams, phishing links
-4. **Edge Cases**: Emojis, non-English text, malformed messages
-
-## 🤝 **Contributing**
-
-### **Development Setup**
-```bash
-# 1. Fork and clone
-git clone https://github.com/your-username/smart-sms-detection.git
-
-# 2. Setup development environment
-flutter doctor
-python -m pip install -r ML_Model/requirements.txt
-
-# 3. Run tests
-flutter test
-python -m pytest ML_Model/tests/
-
-# 4. Submit pull request
-```
-
-### **Contribution Areas**
-- 🔧 **Core Features**: Enhance detection algorithms
-- 🌍 **Localization**: Add support for regional languages
-- 📱 **UI/UX**: Improve user interface and experience
-- 📊 **Analytics**: Add performance monitoring
-- 🧪 **Testing**: Expand test coverage
-
-## 📚 **Documentation**
-
-### **Technical Documentation**
-- 📖 **[Project Documentation](PROJECT_DOCUMENTATION.md)**: Complete technical guide
-- 🚀 **[Setup Guide](PROJECT_SETUP.md)**: Installation and configuration
-- 📊 **[API Reference](API_REFERENCE.md)**: Developer API documentation
-- 🎯 **[User Guide](USER_GUIDE.md)**: End-user instructions
-
-### **Research Papers**
-- 📄 **[ML Architecture](docs/ml_architecture.pdf)**: Detailed model design
-- 📊 **[Performance Analysis](docs/performance_study.pdf)**: Benchmarking results
-- 🔒 **[Privacy Study](docs/privacy_analysis.pdf)**: Security assessment
-
-## 🏆 **Awards & Recognition**
-
-### **Technical Excellence**
-- 🥇 **Best Mobile Security App** - Mobile Security Conference 2024
-- 🏆 **Innovation in Privacy** - Privacy Tech Awards 2024
-- ⭐ **4.8/5 Rating** - 500+ user reviews
-
-### **Impact Metrics**
-- 🛡️ **1,247 Fraud Attempts Blocked** (30-day period)
-- 💰 **₹2,34,000 Potential Loss Prevented** (estimated)
-- 👥 **500+ Active Users** across 15 countries
-- 📈 **94.2% User Satisfaction** rate
-
-## 📞 **Support**
-
-### **Getting Help**
-- 💬 **GitHub Issues**: Report bugs and feature requests
-- 📧 **Email Support**: contact@smartsmsdetection.com
-- 📖 **Documentation**: Comprehensive guides and tutorials
-- 🌐 **Community**: Discord server for discussions
-
-### **Enterprise Support**
-- 🏢 **Custom Deployment**: On-premise solutions
-- 🔧 **Integration Support**: API and SDK development
-- 📊 **Analytics Dashboard**: Advanced reporting tools
-- 🎓 **Training Programs**: Team education and workshops
-
-## 📄 **License**
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 **Acknowledgments**
-
-- **Research Team**: Advanced ML algorithms and privacy-preserving techniques
-- **Beta Testers**: 500+ users who provided valuable feedback
-- **Open Source Community**: Contributors and maintainers
-- **Privacy Advocates**: Guidance on privacy-first design principles
 
 ---
 
-## 🚀 **Quick Links**
+## Privacy
 
-| Resource | Link |
-|----------|------|
-| 📱 **Download APK** | [Latest Release](https://github.com/your-repo/releases) |
-| 📖 **Documentation** | [Technical Docs](PROJECT_DOCUMENTATION.md) |
-| 🚀 **Setup Guide** | [Installation](PROJECT_SETUP.md) |
-| 🐛 **Report Issues** | [GitHub Issues](https://github.com/your-repo/issues) |
-| 💬 **Community** | [Discord Server](https://discord.gg/your-server) |
+- 100% on-device — no data ever leaves the phone
+- No network calls — works fully offline
+- SMS read-only — no send / delete permissions used
+- Contacts optional — contacts permission is requested but NOT required to read SMS
 
 ---
 
-**Made with ❤️ for SMS security and privacy**
+## Known Issues / Limitations
 
-**Project Status**: ✅ Production Ready  
-**Last Updated**: January 2025  
-**Version**: 2.0.0 (2-Class Model + Fraud Logic) 
+| Issue | Notes |
+|-------|-------|
+| FRAUD precision 0.30 — some false positives | Only ~115 fraud training samples; more fraud data would help |
+| SPAM recall 77% — some promotional SMS missed | Class imbalance: 1,080 spam vs 21,418 legit in training set |
+| `phishing_link` rule fires broadly | Matches any URL — many legit service SMS (Airtel, Indane, banks) contain URLs |
+
+---
+
+## License
+
+MIT License
+
+---
+
+**Version**: 3.0.0 · **Last updated**: March 2026  
+**Platform**: Android 7.0+ (API 23+) · **Flutter**: 3.32.5 · **tflite_flutter**: 0.11.0
