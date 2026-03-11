@@ -15,14 +15,14 @@ class SmsLogItem extends StatelessWidget {
       margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: ListTile(
         leading: Icon(
-          entry.displayIcon,
-          color: entry.displayColor,
+          entry.result.icon,
+          color: entry.result.color,
         ),
         title: Row(
           children: [
-            Icon(entry.displayIcon, color: entry.displayColor),
+            Icon(entry.result.icon, color: entry.result.color),
             const SizedBox(width: 8),
-            Text(entry.resultText),
+            Text(entry.result.label),
           ],
         ),
         subtitle: Column(
@@ -97,9 +97,9 @@ class SmsLogItem extends StatelessWidget {
                   ),
                 Expanded(
                   child: Text(
-                    entry.resultText,
+                    entry.result.label,
                     style: TextStyle(
-                      color: entry.displayColor,
+                      color: entry.result.color,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -134,7 +134,7 @@ class SmsLogItem extends StatelessWidget {
                   context: context,
                   builder: (context) => FeedbackDialog(
                     message: entry,
-                    currentClassification: entry.resultText,
+                    currentClassification: entry.result.label,
                   ),
                 );
               },
