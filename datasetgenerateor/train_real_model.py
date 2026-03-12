@@ -560,11 +560,23 @@ else:
     fm = pd.DataFrame(columns=['sender','body','label'])
     print("\n   ⚠️  fraud_master.csv not found — skipping synthetic injection")
 
+# ── inject spam_master.csv (optional synthetic SPAM rows) ────────────────────
+SPAM_MASTER = os.path.join(os.path.dirname(__file__), 'spam_master.csv')
+if os.path.exists(SPAM_MASTER):
+    sm = pd.read_csv(SPAM_MASTER, dtype=str).fillna('')
+    sm = sm.rename(columns={'address': 'sender'})
+    sm['label'] = 'spam'            # all rows are confirmed promotional spam
+    print(f"\n💉 Injecting spam_master.csv: {len(sm):,} rows")
+else:
+    sm = pd.DataFrame(columns=['sender','body','label'])
+    print("\n   ⚠️  spam_master.csv not found — skipping synthetic injection")
+
 # ── combine ────────────────────────────────────────────────────────────────────
 combined = pd.concat([
     phone_df[['sender','body','label']],
     spam_df[['sender','body','label']],
     fm[['sender','body','label']],
+    sm[['sender','body','label']],
 ], ignore_index=True).drop_duplicates(subset='body')
 
 print(f"\n📊 Combined dataset: {len(combined):,} messages")
