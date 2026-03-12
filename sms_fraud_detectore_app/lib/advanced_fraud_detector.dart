@@ -385,7 +385,8 @@ class AdvancedFraudDetector {
   double _spamRisk(String t) => math.min(
       (_hasUrl(t) ? 0.2 : 0) +
       (_score(t, _rewardKw) > 0.3 ? 0.3 : 0) +
-      (RegExp(r'(rummy|poker|casino|bet|fantasy|ipl|cricket.?match|gaming)').hasMatch(t) ? 0.3 : 0),
+      // Gambling / rummy promotional = SPAM not FRAUD
+      (RegExp(r'rummy|poker|casino|bet|satta|fantasy.*league', caseSensitive: false).hasMatch(t) ? 0.4 : 0),
       1.0);
 
   double _legitScore(String t, String s) {
@@ -399,6 +400,11 @@ class AdvancedFraudDetector {
     if (RegExp(r'^[A-Z]{2}-').hasMatch(s)) score += 0.5;
     // Short numeric/alpha sender codes (e.g. IRCTC, BESCOM)
     if (!_isPhone(s) && s.length <= 6) score += 0.3;
+    // Trusted URL = strong legit signal even from a phone-number sender
+    // (Airtel missed-call, Amazon OTP, Google Maps, WhatsApp invite, BBMP, etc.)
+    if (_hasTrustedUrl(t)) score += 0.5;
+    // Missed-call notification pattern
+    if (RegExp(r'missed.{0,5}call').hasMatch(t)) score += 0.3;
     return math.min(score, 1.0);
   }
 

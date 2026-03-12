@@ -123,7 +123,9 @@ def _fraud_risk(t, s):
 def _spam_risk(t):
     return min(
         (_has_url(t) * 0.2) +
-        (0.3 if _score(t, REWARD_KW) > 0.3 else 0),
+        (0.3 if _score(t, REWARD_KW) > 0.3 else 0) +
+        # Gambling / rummy = SPAM not FRAUD
+        (0.4 if re.search(r'rummy|poker|casino|bet|satta|fantasy.*league', t) else 0),
         1.0)
 
 def _legit_score(t, s):
@@ -132,6 +134,11 @@ def _legit_score(t, s):
     if len(t) < 160 and not _has_url(t):            score += 0.2
     if re.match(r'^[A-Z]{2}-', s):                  score += 0.5
     if not _is_phone_sender(s) and len(s) <= 6:     score += 0.3
+    # Trusted URL from phone sender = strong legit signal
+    # (e.g. Airtel missed-call, Amazon OTP, Google Maps share)
+    if _has_trusted_url(t):                         score += 0.5
+    # Missed-call notification pattern
+    if re.search(r'missed.{0,5}call', t):           score += 0.3
     return min(score, 1.0)
 
 def extract_features(body: str, sender: str):
@@ -256,20 +263,58 @@ LEGIT_PREFIXES = {'AX','AD','VM','VK','TX','JD','JM','JK','BG','BW','BP',
 # (e.g. Airtel missed-call app, Google Maps share, WhatsApp invite, BBMP portal).
 # Matching any of these prevents the URL-scam rules from mislabeling them.
 TRUSTED_URL_PATTERNS = [
-    r'i\.airtel\.in',           # Airtel missed-call notification service
-    r'maps\.google\.com',       # Google Maps location share
-    r'splitwise\.com',          # Splitwise group invite
-    r'whatsapp\.com/dl/',       # WhatsApp deep link invite
+    # Telecom
+    r'i\.airtel\.in',           # Airtel missed-call / recharge notification
+    r'airtel\.in', r'airtel\.com',
+    r'jio\.com', r'jio\.in',
+    r'vi\.in', r'vodafone\.in', r'bsnl\.in',
+    # Banking & payments
+    r'onlinesbi\.sbi', r'onlinesbi\.com', r'sbi\.co\.in',
+    r'hdfcbank\.com', r'icicibank\.com', r'axisbank\.com', r'axisdirect\.in',
+    r'kotak\.com', r'kotakbank\.com', r'yesbank\.in', r'rblbank\.com',
+    r'indusind\.com', r'federalbank\.co\.in', r'idfcfirstbank\.com',
+    r'canarabank\.com', r'pnbindia\.in', r'bankofbaroda\.in',
+    r'paytm\.com', r'phonepe\.com', r'gpay\.app', r'bhimupi\.org\.in',
+    r'npci\.org\.in', r'mobikwik\.com', r'freecharge\.in',
+    r'razorpay\.com', r'cashfree\.com',
+    # NBFC & fintech
+    r'bajajfinserv\.in', r'bflcomm\.in', r'hdbfs\.com', r'tatacapital\.com',
+    # Insurance
+    r'icicilombard\.com', r'hdfclife\.com', r'licindia\.in', r'starhealth\.in',
+    r'policybazaar\.com', r'digit\.in', r'acko\.com',
+    # E-commerce
+    r'amazon\.in', r'amazon\.com', r'amzn\.in',
+    r'flipkart\.com', r'myntra\.com', r'meesho\.com', r'nykaa\.com',
+    r'bigbasket\.com', r'jiomart\.com', r'zepto\.com', r'blinkit\.com',
+    r'swiggy\.in', r'swiggy\.com', r'zomato\.com',
+    # Delivery & logistics
+    r'bluedart\.com', r'delhivery\.com', r'ekart\.in', r'dtdc\.com',
+    r'indiapost\.gov\.in', r'shiprocket\.in',
+    # Travel
+    r'irctc\.co\.in', r'indianrail\.gov\.in', r'makemytrip\.com',
+    r'goibibo\.com', r'yatra\.com', r'cleartrip\.com',
+    # Utilities & govt
+    r'india\.gov\.in', r'incometax\.gov\.in', r'uidai\.gov\.in',
+    r'epfindia\.gov\.in', r'mygov\.in', r'digilocker\.gov\.in',
     r'bbmpgov\.in',             # BBMP government portal (election duty)
+    r'webapps\.bbmpgov\.in',
+    r'bescom\.org', r'mahadiscom\.in', r'tneb\.in',
+    r'igl\.co\.in', r'gujaratgas\.com',
+    # Google services
+    r'maps\.google\.com',       # Google Maps location share
+    r'play\.google\.com', r'google\.co\.in', r'forms\.gle',  # Google Forms (colleges)
+    # Social & apps
+    r'whatsapp\.com/dl/',       # WhatsApp deep link invite
+    r'splitwise\.com',          # Splitwise group invite
+    # MF portals
     r'utimf\.com',              # UTI Mutual Fund portal
     r'nipponindia\.com',        # Nippon India MF portal
-    r'app\.jupiter\.money',     # Jupiter Bank app deep link
-    r'bflcomm\.in',             # Bajaj Finance (EMI card status)
+    r'app\.jupiter\.money',    # Jupiter Bank app deep link
     r'pvr\.im',                 # PVR Cinemas promo link
-    r'amazon\.in/a/c',          # Amazon account / OTP link
+    # Colleges & education (known legit institutions)
     r'ewsbm\.com',              # East West School of Business
     r'sindhicollege\.com',      # Sindhi College
-    r'forms\.gle',              # Google Forms (educational institutions)
+    r'paruluniversity\.ac\.in', # Parul University
     # NOTE: generic college event promo URLs are NOT here — they are SPAM.
 ]
 
