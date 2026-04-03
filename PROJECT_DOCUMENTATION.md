@@ -505,6 +505,36 @@ produce inference in under 50 ms on a mid-range Android phone (Android 7+, API 2
 
 Two complementary sources were combined to balance Indian context with class diversity:
 
+#### 10.2.1 Dedicated Data Collection App (`sms_extractor`)
+
+Real-device SMS collection is handled by a **separate Flutter utility app** in
+`sms_extractor/` (not by the detection app). This separation keeps data collection,
+dataset curation, and inference deployment decoupled.
+
+**Why a separate app was built**
+- Isolates one-time export permissions from the production detector app.
+- Enables repeatable dataset snapshots during model iterations.
+- Keeps training data generation independent from runtime classification logic.
+
+**Collector workflow**
+1. Request `Permission.sms` and `Permission.manageExternalStorage`.
+2. Read inbox messages via `flutter_sms_inbox` (`SmsQueryKind.inbox`).
+3. Normalize message body (`\n` replaced with space) and date to ISO-8601.
+4. Write CSV with header `id,address,body,date`.
+5. Save file under `SMSExports/phone_sms_export_<timestamp>.csv` in device storage.
+
+**Source implementation**
+- Export logic: `sms_extractor/lib/sms_exporter.dart`
+- Minimal UI trigger: `sms_extractor/lib/main.dart`
+
+**Output contract used by training pipeline**
+- Required columns: `id`, `address`, `body`, `date`
+- Loader mapping in training: `address -> sender`, `body -> body`
+- Dedup key: message `body`
+
+This collector produced the phone CSV exports used in model training and evaluation
+through v4.x.
+
 **Source 1 — Real Indian SMS (phone CSV exports)**
 Three CSV files exported directly from a physical Android device (SM E135F, India) using the
 `sms_extractor` Flutter utility included in this project. Each CSV contains columns:
