@@ -176,7 +176,7 @@ in the human-reviewed set.
 
 ### Sanity checks (v4.2)
 
-| Message | Expected | v4.1 | v4.2 |
+| Message | Expected | v4.1 | v4.2 | 
 |---------|----------|------|------|
 | Bank OTP | LEGIT | ✅ | ✅ |
 | Bank debit alert | LEGIT | ✅ | ✅ |
@@ -478,6 +478,37 @@ python train_real_model.py
 | phishing_link still broad by design | Runtime guard now suppresses LEGIT badges and trusted-domain allowlist is expanded, but URL-heavy service inboxes can still dominate Threat Breakdown counts |
 | 500 message cap | Older messages beyond 500 are never seen |
 | Synthetic fraud coverage | Synthetic rows cover 25 categories but may not generalise to novel fraud patterns not represented in the generator |
+
+### 9.1 Immediate Mitigation Plan — Human Evaluation Expansion
+
+To address reviewer concerns around the 117-sample human set, evaluation is being upgraded to a
+larger **human-gold benchmark (target: 500-1000+ messages)** collected from real device exports.
+
+**Objective**
+- Reduce variance in human-label metrics and make claims statistically defensible.
+- Quantify uncertainty via confidence intervals, not point accuracy alone.
+- Separate model-quality issues from small-sample noise.
+
+**Operational plan**
+1. Generate a stratified review pack from phone exports:
+   - Script: `datasetgenerateor/create_human_eval_pack.py`
+   - Example: `python create_human_eval_pack.py --size 800 --seed 42`
+2. Human review all rows in `human_eval_pack.csv` by filling `corrected_label` with
+   `legit|spam|fraud` (plus reviewer metadata).
+3. Evaluate deployed TFLite model on the reviewed gold set:
+   - Script: `datasetgenerateor/evaluate_human_eval.py`
+   - Example: `python evaluate_human_eval.py --gold human_eval_pack.csv`
+4. Publish alongside accuracy:
+   - Per-class precision/recall/F1
+   - Confusion matrix
+   - 95% CI for human-label accuracy
+   - Error bucket analysis from `human_eval_errors.csv`
+
+**Acceptance gate for next release**
+- Human-gold sample size: `N >= 500` (preferred `N >= 1000`)
+- Reported with 95% CI and per-class metrics
+- Hard-case slice explicitly included (phone-sender fraud mimicry, URL-heavy service SMS,
+  gambling promos, OTP/bank alerts)
 
 ---
 
